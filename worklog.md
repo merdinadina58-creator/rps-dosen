@@ -167,3 +167,37 @@ Stage Summary:
 - ✅ UI: wizard 3 langkah dengan animated progress + collapsible preview
 - ✅ Lint 0 error, no browser errors
 - Sekarang aplikasi BENAR-BENAR berbeda dari Word: input manual diper minim, AI yang menyusun RPS lengkap
+
+---
+Task ID: 10
+Agent: main (orchestrator)
+Task: Fix hydration mismatch error on Radix Sheet (mobile menu) + ThemeToggle
+
+Work Log:
+- User reported console error: hydration mismatch on Sheet trigger's `aria-controls` attribute
+  (server: radix-_R_matmlb_ vs client: radix-_R_5atmlb_)
+- Root cause: Radix UI generates element IDs via React's useId, which can mismatch server/client
+  in Next.js 16 + React 19 + Turbopack. Also, next-themes reads theme from localStorage (client-only).
+- Fix 1: Created `useMounted()` hook (src/hooks/use-mounted.ts) using `useSyncExternalStore`:
+  * subscribe: no-op (mounted state never changes after first render)
+  * getSnapshot: returns true on client
+  * getServerSnapshot: returns false during SSR
+  * This is the React 19-recommended pattern — avoids the `react-hooks/set-state-in-effect` lint error
+    that `useEffect(() => setMounted(true))` would trigger
+- Fix 2: AppShell — deferred rendering of the Radix Sheet (mobile menu) until after mount.
+  The Sheet is lg:hidden, so invisible on desktop — no visual flash.
+- Fix 3: ThemeToggle — render a stable disabled placeholder (Sun icon) until mounted,
+  then swap to the actual toggle. Prevents next-themes localStorage read from causing mismatch.
+- Verified via Agent Browser:
+  * Desktop (1280x800): page renders, no hydration errors in console
+  * Mobile (390x844): reloaded page, Sheet "Menu" button appears after mount, opens correctly
+  * Theme toggle: works, dark mode applied (`document.documentElement.className` = "dark")
+  * No console errors, no hydration warnings
+- Lint: 0 errors (useSyncExternalStore pattern passes react-hooks/set-state-in-effect rule)
+
+Stage Summary:
+- ✅ Hydration mismatch error resolved
+- ✅ Mobile menu (Radix Sheet) works without console errors
+- ✅ Theme toggle works with stable SSR placeholder
+- ✅ useMounted hook is reusable for other client-only components
+- ✅ Lint clean, no browser errors on desktop or mobile

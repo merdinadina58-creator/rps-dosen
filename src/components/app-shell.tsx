@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { useMounted } from '@/hooks/use-mounted'
 import { useAppStore, type View } from '@/lib/store'
 import { DashboardView } from '@/components/views/dashboard-view'
 import { RpsListView } from '@/components/views/rps-list-view'
@@ -139,6 +140,17 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
+  const mounted = useMounted()
+
+  // Avoid hydration mismatch: next-themes reads theme from localStorage (client-only).
+  // Render a stable placeholder until mounted, then swap to the actual toggle.
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" aria-label="Toggle theme" disabled>
+        <Sun className="size-4" />
+      </Button>
+    )
+  }
   return (
     <Button
       variant="ghost"
@@ -155,31 +167,37 @@ function ThemeToggle() {
 export function AppShell() {
   const { view, rpsId } = useAppStore()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  // Defer rendering of the Radix Sheet (mobile menu) until after hydration.
+  // Radix generates aria-controls IDs via useId which can mismatch server/client.
+  // The Sheet is lg:hidden so it's invisible on desktop anyway — no visual flash.
+  const mounted = useMounted()
 
   return (
     <div className="min-h-screen flex flex-col bg-muted/30">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex h-14 items-center gap-3 px-4">
-          {/* Mobile menu */}
-          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Menu">
-                <Menu className="size-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-4">
-              <SheetHeader className="mb-4">
-                <SheetTitle className="flex items-center gap-2">
-                  <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                    <LogoIcon className="size-5 text-primary-foreground" />
-                  </div>
-                  <span>RPS Dosen</span>
-                </SheetTitle>
-              </SheetHeader>
-              <NavList onNavigate={() => setMobileNavOpen(false)} />
-            </SheetContent>
-          </Sheet>
+          {/* Mobile menu — only render after mount to avoid Radix useId hydration mismatch */}
+          {mounted && (
+            <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Menu">
+                  <Menu className="size-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-4">
+                <SheetHeader className="mb-4">
+                  <SheetTitle className="flex items-center gap-2">
+                    <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
+                      <LogoIcon className="size-5 text-primary-foreground" />
+                    </div>
+                    <span>RPS Dosen</span>
+                  </SheetTitle>
+                </SheetHeader>
+                <NavList onNavigate={() => setMobileNavOpen(false)} />
+              </SheetContent>
+            </Sheet>
+          )}
 
           {/* Logo */}
           <div className="flex items-center gap-2">
