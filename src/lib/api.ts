@@ -133,6 +133,43 @@ export interface RpsDetail extends Rps {
   penilaian: KomponenPenilaian[]
 }
 
+// Hasil generate RPS lengkap oleh AI
+export interface FullRpsGenerated {
+  deskripsi: string
+  cpl: string
+  cpmk: Array<{
+    kode: string
+    deskripsi: string
+    subCpmk: Array<{ kode: string; deskripsi: string }>
+  }>
+  pertemuan: Array<{
+    mingguKe: number
+    materi: string
+    metode: string
+    aktivitasDosen: string
+    aktivitasMhs: string
+    pengalamanBelajar: string
+    indikatorPenilaian: string
+    bobotPenilaian: number
+    estimasiWaktu: string
+  }>
+  penilaian: Array<{
+    nama: string
+    bobot: number
+    bentuk: string
+    keterangan: string
+  }>
+  referensi: Array<{
+    jenis: string
+    judul: string
+    pengarang: string
+    penerbit: string
+    tahun: string
+    url: string
+    isUtama: boolean
+  }>
+}
+
 export interface Stats {
   totals: {
     rps: number
@@ -239,7 +276,34 @@ export const api = {
   // Stats
   getStats: () => fetchJson<Stats>('/api/stats'),
 
+  // Create RPS lengkap dengan semua relasi (dari hasil generate AI)
+  createFullRps: (data: {
+    mataKuliahId: string
+    dosenId: string
+    tahunAjaran: string
+    semester: string
+    kelas?: string | null
+    judul: string
+    kurikulum?: string
+    status?: string
+    generated: FullRpsGenerated
+  }) => fetchJson<Rps>('/api/rps/create-full', { method: 'POST', body: JSON.stringify(data) }),
+
   // AI
+  generateFullRps: (data: {
+    namaMataKuliah: string
+    kodeMataKuliah?: string
+    deskripsiMataKuliah: string
+    sks: number
+    prodi: string
+    semester: number
+    prasyarat?: string
+    jumlahCpmk?: number
+    jumlahPertemuan?: number
+  }) => fetchJson<FullRpsGenerated>('/api/ai/generate-full-rps', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
   generateCpmk: (data: {
     namaMataKuliah: string
     deskripsi: string

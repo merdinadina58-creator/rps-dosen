@@ -131,3 +131,39 @@ Stage Summary:
 - ✅ Responsive (mobile + desktop), sticky footer, dark mode support
 - ✅ Zero errors, zero lint issues
 - ✅ Dev server running cleanly on port 3000
+
+---
+Task ID: 9
+Agent: main (orchestrator)
+Task: Tambah fitur "Generate RPS Otomatis Lengkap dengan AI" (respons feedback user)
+
+Work Log:
+- User feedback: aplikasi masih terlalu manual (mirip Word), harus klik generate per-tab satu per satu
+- Solusi: tambah fitur generate SELURUH RPS sekaligus dalam satu klik
+- Added `generateFullRps()` to src/lib/ai.ts:
+  * Awalnya satu prompt raksasa → timeout 59s + error 500
+  * Refactored ke chained calls (4 step): deskripsi+CPL+penilaian → CPMK → pertemuan → referensi
+  * Lebih reliable, quality lebih baik per komponen
+- Created API route /api/ai/generate-full-rps (POST, maxDuration 120s)
+- Created API route /api/rps/create-full (POST - creates RPS + all relations in transaction)
+- Created komponen AutoGenerateRpsDialog (src/components/auto-generate-rps-dialog.tsx):
+  * 3-step wizard: Input → Generating (animated progress) → Preview
+  * Mode toggle: pilih mata kuliah existing ATAU input kustom baru
+  * Preview collapsible semua komponen (deskripsi, CPL, CPMK, pertemuan, penilaian, referensi)
+  * Validasi total bobot penilaian (warning jika ≠ 100%)
+  * Tombol "Ulangi" untuk regenerate, "Simpan RPS Lengkap" untuk save
+- Integrated ke Dashboard: hero banner gradient emerald dengan tombol "Mulai Generate"
+- Integrated ke RPS List: tombol "Generate RPS dengan AI" prominent + info banner + empty state dgn 2 tombol
+- Bug fix: `zai is not defined` setelah refactor (lupa add back `const zai = await getZAI()`)
+- Server stability issue: next-server + chromium OOM kill. Fixed with double-fork daemonization: `(setsid ./next dev ... &)`
+- Verified end-to-end via curl: AI generate (HTTP 200, 70s) + create-full (HTTP 201, 0.24s)
+- Verified via Agent Browser: dialog works, RPS "Jaringan Komputer - AI Generated Test" muncul di list, detail menampilkan 4 CPMK + 12 Sub-CPMK + 16 pertemuan + 5 penilaian + 6 referensi
+
+Stage Summary:
+- ✅ Fitur "Generate RPS Otomatis" berfungsi end-to-end
+- ✅ Cukup pilih mata kuliah + dosen → AI generate semua (deskripsi, CPL, CPMK, 16 pertemuan, penilaian, referensi) → preview → simpan
+- ✅ RPS tersimpan lengkap dengan semua relasi dalam satu transaksi
+- ✅ Backend: AI generate 70s, create 0.24s
+- ✅ UI: wizard 3 langkah dengan animated progress + collapsible preview
+- ✅ Lint 0 error, no browser errors
+- Sekarang aplikasi BENAR-BENAR berbeda dari Word: input manual diper minim, AI yang menyusun RPS lengkap

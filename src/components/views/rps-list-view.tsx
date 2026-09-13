@@ -12,6 +12,7 @@ import {
   Users,
   BookOpen,
   Pencil,
+  Wand2,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -39,6 +40,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { StatusBadge } from '@/components/status-badge'
 import { RpsFormDialog } from '@/components/rps-form-dialog'
+import { AutoGenerateRpsDialog } from '@/components/auto-generate-rps-dialog'
 import { api, type Rps } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
 
@@ -50,6 +52,7 @@ export function RpsListView() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [dosenFilter, setDosenFilter] = useState<string>('all')
   const [createOpen, setCreateOpen] = useState(false)
+  const [autoGenOpen, setAutoGenOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Rps | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Rps | null>(null)
 
@@ -102,15 +105,52 @@ export function RpsListView() {
             Kelola seluruh dokumen Rencana Pembelajaran Semester
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setEditTarget(null)
-            setCreateOpen(true)
-          }}
-          className="bg-primary hover:bg-primary/90"
-        >
-          <Plus className="size-4 mr-2" /> Buat RPS Baru
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            onClick={() => setAutoGenOpen(true)}
+            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm"
+          >
+            <Wand2 className="size-4 mr-2" /> Generate RPS dengan AI
+          </Button>
+          <Button
+            onClick={() => {
+              setEditTarget(null)
+              setCreateOpen(true)
+            }}
+            variant="outline"
+          >
+            <Plus className="size-4 mr-2" /> Buat Manual
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* Highlight banner for AI feature */}
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, delay: 0.1 }}
+        className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-emerald-500/20 p-4"
+      >
+        <div className="flex items-start gap-3">
+          <div className="size-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shrink-0">
+            <Wand2 className="size-5" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-sm">
+              Baru! Generate RPS lengkap otomatis dengan AI
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Cukup pilih mata kuliah, AI akan menyusun deskripsi, CPL, CPMK, 16 pertemuan, penilaian, dan referensi dalam sekali klik — bukan lagi input manual seperti di Word.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => setAutoGenOpen(true)}
+            className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shrink-0"
+          >
+            Coba Sekarang
+          </Button>
+        </div>
       </motion.div>
 
       {/* Filters */}
@@ -164,18 +204,26 @@ export function RpsListView() {
           <CardContent className="py-16 text-center">
             <FileText className="size-10 mx-auto text-muted-foreground/50" />
             <p className="mt-3 font-medium">Belum ada RPS</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Buat RPS pertama Anda dengan menekan tombol di atas.
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
+              Buat RPS pertama Anda secara manual, atau biarkan AI menyusunnya lengkap otomatis untuk Anda.
             </p>
-            <Button
-              className="mt-4"
-              onClick={() => {
-                setEditTarget(null)
-                setCreateOpen(true)
-              }}
-            >
-              <Plus className="size-4 mr-2" /> Buat RPS Baru
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center mt-4">
+              <Button
+                onClick={() => setAutoGenOpen(true)}
+                className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+              >
+                <Wand2 className="size-4 mr-2" /> Generate dengan AI
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditTarget(null)
+                  setCreateOpen(true)
+                }}
+              >
+                <Plus className="size-4 mr-2" /> Buat Manual
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -267,6 +315,12 @@ export function RpsListView() {
         onCreated={(id) => {
           openRps(id)
         }}
+      />
+
+      <AutoGenerateRpsDialog
+        open={autoGenOpen}
+        onOpenChange={setAutoGenOpen}
+        onCreated={(id) => openRps(id)}
       />
 
       <AlertDialog

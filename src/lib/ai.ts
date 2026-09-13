@@ -322,3 +322,197 @@ export async function askAssistant(question: string, context?: string): Promise<
 
   return completion.choices[0]?.message?.content || 'Maaf, saya tidak dapat memberikan respons saat ini.'
 }
+
+// ===== Generate Full RPS (all components in one go) =====
+
+export interface GenerateFullRpsInput {
+  namaMataKuliah: string
+  kodeMataKuliah?: string
+  deskripsiMataKuliah: string
+  sks: number
+  prodi: string
+  semester: number
+  prasyarat?: string
+  jumlahCpmk?: number
+  jumlahPertemuan?: number
+}
+
+export interface FullRpsCpmk {
+  kode: string
+  deskripsi: string
+  subCpmk: Array<{ kode: string; deskripsi: string }>
+}
+
+export interface FullRpsPertemuan {
+  mingguKe: number
+  materi: string
+  metode: string
+  aktivitasDosen: string
+  aktivitasMhs: string
+  pengalamanBelajar: string
+  indikatorPenilaian: string
+  bobotPenilaian: number
+  estimasiWaktu: string
+}
+
+export interface FullRpsReferensi {
+  jenis: string
+  judul: string
+  pengarang: string
+  penerbit: string
+  tahun: string
+  url: string
+  isUtama: boolean
+}
+
+export interface FullRpsPenilaian {
+  nama: string
+  bobot: number
+  bentuk: string
+  keterangan: string
+}
+
+export interface GenerateFullRpsResult {
+  deskripsi: string
+  cpl: string
+  cpmk: FullRpsCpmk[]
+  pertemuan: FullRpsPertemuan[]
+  penilaian: FullRpsPenilaian[]
+  referensi: FullRpsReferensi[]
+}
+
+function extractJson(content: string): any {
+  let cleaned = content.trim()
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+  }
+  try {
+    return JSON.parse(cleaned)
+  } catch {
+    const match = cleaned.match(/\{[\s\S]*\}/)
+    if (match) {
+      try {
+        return JSON.parse(match[0])
+      } catch {
+        // ignore
+      }
+    }
+    throw new Error('Format respons AI tidak valid (bukan JSON). Silakan coba lagi.')
+  }
+}
+
+/**
+ * Generate SELURUH isi RPS dengan chaining beberapa panggilan AI yang fokus.
+ * Lebih reliable & cepat per-step dibanding satu prompt raksasa.
+ * Urutan: deskripsi+CPL+penilaian → CPMK+Sub-CPMK → 16 pertemuan → referensi
+ */
+export async function generateFullRps(input: GenerateFullRpsInput): Promise<GenerateFullRpsResult> {
+  const zai = await getZAI()
+  const jumlahCpmk = input.jumlahCpmk || 4
+  const jumlahPertemuan = input.jumlahPertemuan || 16
+
+  // ===== Step 1: Deskripsi, CPL, dan Penilaian (satu prompt ringan) =====
+  const step1Prompt = `Anda adalah pakar pendidikan tinggi Indonesia yang ahli menyusun RPS sesuai SN-Dikti/KKNI/MBKM.
+
+Buatkan untuk mata kuliah berikut:
+Nama: ${input.namaMataKuliah}
+${input.kodeMataKuliah ? `Kode: ${input.kodeMataKuliah}` : ''}
+SKS: ${input.sks}
+Prodi: ${input.prodi}
+Semester: ${input.semester}
+${input.prasyarat ? `Prasyarat: ${input.prasyarat}` : ''}
+Info: ${input.deskripsiMataKuliah}
+
+Hasilkan:
+1. DESKRIPSI mata kuliah (2-4 kalimat narasi akademik yang menarik, BUKAN copy-paste info di atas)
+2. CPL (1-2 kalimat Capaian Pembelajaran Lulusan yang relevan)
+3. PENILAIAN: 4-5 komponen dengan total bobot = 100 (Kehadiran 5-10%, Tugas 15-25%, Proyek 15-25%, UTS 25-30%, UAS 25-30%)
+
+WAJIB balas HANYA JSON valid (tanpa markdown code block):
+{
+  "deskripsi": "...",
+  "cpl": "...",
+  "penilaian": [
+    { "nama": "Kehadiran", "bobot": 10, "bentuk": "Presensi", "keterangan": "..." }
+  ]
+}`
+
+  const completion1 = await zai.chat.completions.create({
+    messages: [
+      { role: 'assistant', content: 'Anda adalah pakar pendidikan tinggi Indonesia. Balas HANYA dengan JSON valid.' },
+      { role: 'user', content: step1Prompt },
+    ],
+    thinking: { type: 'disabled' },
+  })
+  const step1 = extractJson(completion1.choices[0]?.message?.content || '')
+
+  // ===== Step 2: CPMK + Sub-CPMK (reuse existing function) =====
+  const cpmkResult = await generateCpmk({
+    namaMataKuliah: input.namaMataKuliah,
+    deskripsi: input.deskripsiMataKuliah,
+    sks: input.sks,
+    prodi: input.prodi,
+    semester: input.semester,
+    jumlahCpmk,
+  })
+
+  // ===== Step 3: 16 Pertemuan (reuse existing function with CPMK context) =====
+  const pertemuanResult = await generatePertemuan({
+    namaMataKuliah: input.namaMataKuliah,
+    deskripsi: input.deskripsiMataKuliah,
+    sks: input.sks,
+    cpmkList: cpmkResult.cpmk.map((c) => ({ kode: c.kode, deskripsi: c.deskripsi })),
+    subCpmkList: cpmkResult.cpmk.flatMap((c) =>
+      c.subCpmk.map((s) => ({ kode: s.kode, deskripsi: s.deskripsi, cpmkKode: c.kode }))
+    ),
+    jumlahPertemuan,
+  })
+
+  // ===== Step 4: Referensi (reuse existing function) =====
+  const referensiResult = await generateReferensi({
+    namaMataKuliah: input.namaMataKuliah,
+    deskripsi: input.deskripsiMataKuliah,
+    prodi: input.prodi,
+  })
+
+  // ===== Gabungkan hasil =====
+  const result: GenerateFullRpsResult = {
+    deskripsi: String(step1.deskripsi ?? ''),
+    cpl: String(step1.cpl ?? ''),
+    cpmk: cpmkResult.cpmk,
+    pertemuan: pertemuanResult.pertemuan.map((p) => ({
+      mingguKe: Number(p.mingguKe) || 0,
+      materi: String(p.materi ?? ''),
+      metode: String(p.metode ?? ''),
+      aktivitasDosen: String(p.aktivitasDosen ?? ''),
+      aktivitasMhs: String(p.aktivitasMhs ?? ''),
+      pengalamanBelajar: String(p.pengalamanBelajar ?? ''),
+      indikatorPenilaian: String(p.indikatorPenilaian ?? ''),
+      bobotPenilaian: Number(p.bobotPenilaian) || 0,
+      estimasiWaktu: String(p.estimasiWaktu ?? '150 menit'),
+    })),
+    penilaian: Array.isArray(step1.penilaian)
+      ? step1.penilaian.map((p: Record<string, unknown>) => ({
+          nama: String(p.nama ?? ''),
+          bobot: Number(p.bobot) || 0,
+          bentuk: String(p.bentuk ?? ''),
+          keterangan: String(p.keterangan ?? ''),
+        }))
+      : [],
+    referensi: referensiResult.referensi.map((r) => ({
+      jenis: String(r.jenis ?? 'buku'),
+      judul: String(r.judul ?? ''),
+      pengarang: String(r.pengarang ?? ''),
+      penerbit: String(r.penerbit ?? ''),
+      tahun: String(r.tahun ?? ''),
+      url: String(r.url ?? ''),
+      isUtama: Boolean(r.isUtama),
+    })),
+  }
+
+  if (!result.deskripsi || result.cpmk.length === 0 || result.pertemuan.length === 0) {
+    throw new Error('Respons AI tidak lengkap. Silakan coba lagi.')
+  }
+
+  return result
+}
