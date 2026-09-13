@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -109,69 +109,142 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
 
   const selectedMk: MataKuliah | undefined = mataKuliahList.find((m) => m.id === mataKuliahId)
 
-  const generateMutation = useMutation({
-    mutationFn: async () => {
-      // Build input based on mode
-      let input: Parameters<typeof api.generateFullRps>[0]
-      if (mode === 'existing') {
-        if (!selectedMk) throw new Error('Pilih mata kuliah terlebih dahulu')
-        input = {
-          namaMataKuliah: selectedMk.nama,
-          kodeMataKuliah: selectedMk.kode,
-          deskripsiMataKuliah: selectedMk.deskripsi || `${selectedMk.nama} (${selectedMk.sks} SKS) - Semester ${selectedMk.semester}, Prodi ${selectedMk.prodi}`,
-          sks: selectedMk.sks,
-          prodi: selectedMk.prodi,
-          semester: selectedMk.semester,
-          prasyarat: selectedMk.prasyarat || undefined,
-          jumlahCpmk: Number(jumlahCpmk) || 4,
-          jumlahPertemuan: 16,
-        }
-      } else {
-        if (!customNama.trim() || !customDeskripsi.trim()) {
-          throw new Error('Nama mata kuliah dan deskripsi wajib diisi untuk mode kustom')
-        }
-        input = {
-          namaMataKuliah: customNama.trim(),
-          kodeMataKuliah: customKode.trim() || undefined,
-          deskripsiMataKuliah: customDeskripsi.trim(),
-          sks: Number(customSks) || 3,
-          prodi: customProdi.trim() || 'Teknik Informatika',
-          semester: Number(customSemester) || 3,
-          jumlahCpmk: Number(jumlahCpmk) || 4,
-          jumlahPertemuan: 16,
-        }
+  // Async generation: POST returns jobId immediately, then poll GET status.
+  // This avoids 502 Bad Gateway from the proxy timing out on long requests.
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [serverProgress, setServerProgress] = useState(0)
+  const [serverLabel, setServerLabel] = useState('')
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
+    }
+  }, [])
+
+  const handleGenerate = useCallback(async () => {
+    // Build input based on mode
+    let input: Parameters<typeof api.generateFullRps>[0]
+    if (mode === 'existing') {
+      if (!selectedMk) {
+        toast.error('Pilih mata kuliah terlebih dahulu')
+        return
       }
-      return api.generateFullRps(input)
-    },
-    onMutate: () => {
-      setError(null)
-      setGenerated(null)
-      setProgressIdx(0)
-      setStep('generating')
-      // Animate progress steps while waiting (chained calls take ~30-45s total)
-      const interval = setInterval(() => {
-        setProgressIdx((prev) => (prev < GENERATING_STEPS.length - 2 ? prev + 1 : prev))
-      }, 6000)
-      // Store interval to clear later
-      ;(generateMutation as unknown as { _interval?: number })._interval = interval
-    },
-    onSuccess: (data) => {
-      const interval = (generateMutation as unknown as { _interval?: number })._interval
-      if (interval) clearInterval(interval)
-      setProgressIdx(GENERATING_STEPS.length - 1)
-      setGenerated(data)
-      // Small delay for final step animation
-      setTimeout(() => setStep('preview'), 600)
-      toast.success('RPS berhasil dibuat oleh AI!')
-    },
-    onError: (e: Error) => {
-      const interval = (generateMutation as unknown as { _interval?: number })._interval
-      if (interval) clearInterval(interval)
-      setError(e.message)
+      input = {
+        namaMataKuliah: selectedMk.nama,
+        kodeMataKuliah: selectedMk.kode,
+        deskripsiMataKuliah:
+          selectedMk.deskripsi ||
+          `${selectedMk.nama} (${selectedMk.sks} SKS) - Semester ${selectedMk.semester}, Prodi ${selectedMk.prodi}`,
+        sks: selectedMk.sks,
+        prodi: selectedMk.prodi,
+        semester: selectedMk.semester,
+        prasyarat: selectedMk.prasyarat || undefined,
+        jumlahCpmk: Number(jumlahCpmk) || 4,
+        jumlahPertemuan: 16,
+      }
+    } else {
+      if (!customNama.trim() || !customDeskripsi.trim()) {
+        toast.error('Nama mata kuliah dan deskripsi wajib diisi untuk mode kustom')
+        return
+      }
+      input = {
+        namaMataKuliah: customNama.trim(),
+        kodeMataKuliah: customKode.trim() || undefined,
+        deskripsiMataKuliah: customDeskripsi.trim(),
+        sks: Number(customSks) || 3,
+        prodi: customProdi.trim() || 'Teknik Informatika',
+        semester: Number(customSemester) || 3,
+        jumlahCpmk: Number(jumlahCpmk) || 4,
+        jumlahPertemuan: 16,
+      }
+    }
+
+    setError(null)
+    setGenerated(null)
+    setProgressIdx(0)
+    setServerProgress(0)
+    setServerLabel('Memulai...')
+    setIsGenerating(true)
+    setStep('generating')
+
+    try {
+      // 1. Start job (returns immediately with jobId)
+      const { jobId } = await api.generateFullRps(input)
+
+      // 2. Poll for status every 2.5s
+      await new Promise<void>((resolve, reject) => {
+        const poll = async () => {
+          try {
+            const job = await api.getGenerateJobStatus(jobId)
+            setServerProgress(job.progress)
+            setServerLabel(job.progressLabel)
+
+            // Map server progress (0-100) to step index for the animated UI
+            // 5 steps: 0-20→0, 20-55→1, 55-85→2, 85-99→3, 100→4(actually 5-1)
+            const idx = Math.min(
+              GENERATING_STEPS.length - 2,
+              Math.floor((job.progress / 100) * (GENERATING_STEPS.length - 1))
+            )
+            setProgressIdx(idx)
+
+            if (job.status === 'done' && job.result) {
+              stopPolling()
+              setProgressIdx(GENERATING_STEPS.length - 1)
+              setGenerated(job.result)
+              setTimeout(() => setStep('preview'), 600)
+              toast.success('RPS berhasil dibuat oleh AI!')
+              resolve()
+            } else if (job.status === 'error') {
+              stopPolling()
+              const msg = job.error || 'Gagal generate RPS'
+              setError(msg)
+              setStep('input')
+              toast.error(msg)
+              reject(new Error(msg))
+            }
+            // pending / running → continue polling
+          } catch (e) {
+            // Network error during poll — don't immediately fail, retry next tick
+            // unless it's a deliberate reject from above
+            if (e instanceof Error && e.message.startsWith('Gagal')) {
+              reject(e)
+            }
+          }
+        }
+
+        // Poll immediately, then every 2.5s
+        void poll()
+        pollRef.current = setInterval(poll, 2500)
+
+        // Safety timeout: 4 minutes max
+        setTimeout(() => {
+          stopPolling()
+          reject(new Error('Generate timeout — silakan coba lagi'))
+        }, 240000)
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Gagal generate RPS'
+      setError(msg)
       setStep('input')
-      toast.error(e.message)
-    },
-  })
+      toast.error(msg)
+    } finally {
+      setIsGenerating(false)
+      stopPolling()
+    }
+  }, [
+    mode,
+    selectedMk,
+    customNama,
+    customKode,
+    customDeskripsi,
+    customSks,
+    customProdi,
+    customSemester,
+    jumlahCpmk,
+    stopPolling,
+  ])
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -220,10 +293,13 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
   })
 
   function handleClose() {
+    stopPolling()
     setStep('input')
     setGenerated(null)
     setError(null)
     setProgressIdx(0)
+    setServerProgress(0)
+    setIsGenerating(false)
     onOpenChange(false)
   }
 
@@ -441,7 +517,23 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
               </div>
               <div className="text-center">
                 <p className="font-semibold text-lg">AI sedang menyusun RPS Anda...</p>
-                <p className="text-sm text-muted-foreground mt-1">Mohon tunggu, ini biasanya 15-30 detik</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {serverLabel || 'Mohon tunggu, ini biasanya 40-60 detik'}
+                </p>
+              </div>
+              {/* Real progress bar from server */}
+              <div className="w-full max-w-md">
+                <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                  <span>Progress</span>
+                  <span className="font-mono font-medium">{serverProgress}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-teal-500"
+                    animate={{ width: `${serverProgress}%` }}
+                    transition={{ duration: 0.4 }}
+                  />
+                </div>
               </div>
               <div className="w-full max-w-md space-y-2">
                 {GENERATING_STEPS.map((s, i) => {
@@ -601,8 +693,8 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
             <>
               <Button variant="outline" onClick={handleClose}>Batal</Button>
               <Button
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending || (mode === 'existing' && !mataKuliahId) || (mode === 'custom' && (!customNama.trim() || !customDeskripsi.trim()))}
+                onClick={handleGenerate}
+                disabled={isGenerating || (mode === 'existing' && !mataKuliahId) || (mode === 'custom' && (!customNama.trim() || !customDeskripsi.trim()))}
                 className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
               >
                 <Wand2 className="size-4 mr-2" /> Generate RPS dengan AI

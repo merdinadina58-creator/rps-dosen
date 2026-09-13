@@ -300,10 +300,19 @@ export const api = {
     prasyarat?: string
     jumlahCpmk?: number
     jumlahPertemuan?: number
-  }) => fetchJson<FullRpsGenerated>('/api/ai/generate-full-rps', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
+  }) =>
+    fetchJson<{ jobId: string; status: string }>('/api/ai/generate-full-rps', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getGenerateJobStatus: (jobId: string) =>
+    fetchJson<{
+      status: 'pending' | 'running' | 'done' | 'error'
+      progress: number
+      progressLabel: string
+      result?: FullRpsGenerated
+      error?: string
+    }>(`/api/ai/generate-full-rps/${jobId}`),
   generateCpmk: (data: {
     namaMataKuliah: string
     deskripsi: string

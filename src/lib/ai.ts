@@ -15,6 +15,39 @@ async function getZAI() {
   return zaiInstance
 }
 
+/**
+ * Wrap an AI completion call with retry-on-429 logic.
+ * The z-ai API rate-limits concurrent requests; if we hit 429 we back off and retry.
+ */
+async function createWithRetry(
+  messages: Array<{ role: 'assistant' | 'user'; content: string }>,
+  retries = 3
+): Promise<string> {
+  const zai = await getZAI()
+  let lastError: unknown
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const completion = await zai.chat.completions.create({
+        messages,
+        thinking: { type: 'disabled' },
+      })
+      return completion.choices[0]?.message?.content || ''
+    } catch (err) {
+      lastError = err
+      const msg = err instanceof Error ? err.message : String(err)
+      // Retry on 429 (rate limit) or network errors
+      if (/429|Too many requests|fetch failed|ECONNRESET/i.test(msg) && attempt < retries) {
+        // Exponential backoff: 2s, 4s, 8s
+        const delay = Math.pow(2, attempt + 1) * 1000
+        await new Promise((r) => setTimeout(r, delay))
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastError
+}
+
 export interface GenerateCpmkInput {
   namaMataKuliah: string
   deskripsi: string
@@ -401,17 +434,34 @@ function extractJson(content: string): any {
   }
 }
 
+export interface ProgressUpdate {
+  progress: number // 0..100
+  label: string
+}
+
 /**
  * Generate SELURUH isi RPS dengan chaining beberapa panggilan AI yang fokus.
  * Lebih reliable & cepat per-step dibanding satu prompt raksasa.
- * Urutan: deskripsi+CPL+penilaian → CPMK+Sub-CPMK → 16 pertemuan → referensi
+ *
+ * Execution: Sequential (deskripsi+CPL+penilaian → CPMK → 16 pertemuan → referensi)
+ * untuk menghindari 429 rate-limit dari API saat concurrent requests.
+ * Total waktu ~50-70s, berjalan di background via async job pattern (lihat ai-job-store.ts)
+ * sehingga tidak menyebabkan 502 gateway timeout.
  */
-export async function generateFullRps(input: GenerateFullRpsInput): Promise<GenerateFullRpsResult> {
-  const zai = await getZAI()
+export async function generateFullRps(
+  input: GenerateFullRpsInput,
+  onProgress?: (update: ProgressUpdate) => void
+): Promise<GenerateFullRpsResult> {
   const jumlahCpmk = input.jumlahCpmk || 4
   const jumlahPertemuan = input.jumlahPertemuan || 16
 
-  // ===== Step 1: Deskripsi, CPL, dan Penilaian (satu prompt ringan) =====
+  const report = (progress: number, label: string) => {
+    onProgress?.({ progress, label })
+  }
+
+  report(5, 'Menganalisis informasi mata kuliah')
+
+  // ===== Step 1 prompt (deskripsi, CPL, penilaian) =====
   const step1Prompt = `Anda adalah pakar pendidikan tinggi Indonesia yang ahli menyusun RPS sesuai SN-Dikti/KKNI/MBKM.
 
 Buatkan untuk mata kuliah berikut:
@@ -437,16 +487,19 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   ]
 }`
 
-  const completion1 = await zai.chat.completions.create({
-    messages: [
+  // ===== Step 1: Deskripsi, CPL, Penilaian (sequential to avoid 429 rate limit) =====
+  report(10, 'Menyusun deskripsi, CPL & komponen penilaian')
+
+  const step1Raw = extractJson(
+    await createWithRetry([
       { role: 'assistant', content: 'Anda adalah pakar pendidikan tinggi Indonesia. Balas HANYA dengan JSON valid.' },
       { role: 'user', content: step1Prompt },
-    ],
-    thinking: { type: 'disabled' },
-  })
-  const step1 = extractJson(completion1.choices[0]?.message?.content || '')
+    ])
+  )
 
-  // ===== Step 2: CPMK + Sub-CPMK (reuse existing function) =====
+  // ===== Step 2: CPMK + Sub-CPMK =====
+  report(35, 'Merancang CPMK & Sub-CPMK')
+
   const cpmkResult = await generateCpmk({
     namaMataKuliah: input.namaMataKuliah,
     deskripsi: input.deskripsiMataKuliah,
@@ -456,7 +509,9 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
     jumlahCpmk,
   })
 
-  // ===== Step 3: 16 Pertemuan (reuse existing function with CPMK context) =====
+  // ===== Step 3: 16 Pertemuan (needs CPMK context) =====
+  report(60, 'Menyusun rencana 16 pertemuan mingguan')
+
   const pertemuanResult = await generatePertemuan({
     namaMataKuliah: input.namaMataKuliah,
     deskripsi: input.deskripsiMataKuliah,
@@ -468,17 +523,21 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
     jumlahPertemuan,
   })
 
-  // ===== Step 4: Referensi (reuse existing function) =====
+  // ===== Step 4: Referensi =====
+  report(85, 'Mengumpulkan referensi bahan pustaka')
+
   const referensiResult = await generateReferensi({
     namaMataKuliah: input.namaMataKuliah,
     deskripsi: input.deskripsiMataKuliah,
     prodi: input.prodi,
   })
 
+  report(95, 'Menyusun dokumen RPS final')
+
   // ===== Gabungkan hasil =====
   const result: GenerateFullRpsResult = {
-    deskripsi: String(step1.deskripsi ?? ''),
-    cpl: String(step1.cpl ?? ''),
+    deskripsi: String(step1Raw.deskripsi ?? ''),
+    cpl: String(step1Raw.cpl ?? ''),
     cpmk: cpmkResult.cpmk,
     pertemuan: pertemuanResult.pertemuan.map((p) => ({
       mingguKe: Number(p.mingguKe) || 0,
@@ -491,8 +550,8 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
       bobotPenilaian: Number(p.bobotPenilaian) || 0,
       estimasiWaktu: String(p.estimasiWaktu ?? '150 menit'),
     })),
-    penilaian: Array.isArray(step1.penilaian)
-      ? step1.penilaian.map((p: Record<string, unknown>) => ({
+    penilaian: Array.isArray(step1Raw.penilaian)
+      ? step1Raw.penilaian.map((p: Record<string, unknown>) => ({
           nama: String(p.nama ?? ''),
           bobot: Number(p.bobot) || 0,
           bentuk: String(p.bentuk ?? ''),
@@ -513,6 +572,8 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   if (!result.deskripsi || result.cpmk.length === 0 || result.pertemuan.length === 0) {
     throw new Error('Respons AI tidak lengkap. Silakan coba lagi.')
   }
+
+  report(100, 'Selesai')
 
   return result
 }

@@ -201,3 +201,46 @@ Stage Summary:
 - ✅ Theme toggle works with stable SSR placeholder
 - ✅ useMounted hook is reusable for other client-only components
 - ✅ Lint clean, no browser errors on desktop or mobile
+
+---
+Task ID: 11
+Agent: main (orchestrator)
+Task: Fix 502 Bad Gateway on /api/ai/generate-full-rps (analisa gambar user)
+
+Work Log:
+- User uploaded screenshot showing "Request gagal (502)" on Generate RPS dialog + console error "502 Bad Gateway /api/ai/generate-full-rps"
+- VLM analysis confirmed: 502 Bad Gateway from server when calling AI generate endpoint
+- Root cause: generateFullRps takes 57-70s (chained AI calls). The preview environment's gateway/proxy
+  times out on requests > ~30-60s → returns 502 to the browser
+- Solution: ASYNC JOB PATTERN (avoids gateway timeout entirely):
+  * POST /api/ai/generate-full-rps → returns {jobId} immediately (0.13s, HTTP 202)
+  * Background: generation runs via Promise.then() (fire-and-forget), updates job store with progress
+  * GET /api/ai/generate-full-rps/[jobId] → polled by client every 2.5s, returns {status, progress, progressLabel, result?}
+  * Each HTTP request is < 200ms → never hits gateway timeout
+- Created src/lib/ai-job-store.ts: in-memory Map store with TTL (10min auto-expire), createJob/getJob/updateJob/deleteJob
+- Modified POST route: creates job, starts background generation, returns jobId immediately
+- Created GET [jobId]/route.ts: returns job status + result when done
+- Added createWithRetry() helper: retries on 429 rate-limit with exponential backoff (2s, 4s, 8s)
+- Refactored generateFullRps:
+  * Added onProgress callback for real-time progress reporting (0-100%)
+  * Sequential execution (reverted from parallel — Promise.all triggered 429 Too Many Requests)
+  * Progress checkpoints: 10% deskripsi, 35% CPMK, 60% pertemuan, 85% referensi, 95% final, 100% done
+- Updated api.ts: generateFullRps returns {jobId}, added getGenerateJobStatus(jobId)
+- Updated AutoGenerateRpsDialog:
+  * Replaced useMutation (sync await) with custom async handleGenerate using useRef polling
+  * POST → get jobId → poll GET every 2.5s → update real progress bar + step indicators
+  * Real progress bar (gradient emerald) shows actual server-side % 
+  * Server label displayed live ("Menyusun deskripsi...", "Merancang CPMK...", etc.)
+  * Safety timeout 4min, cleanup on dialog close
+- Verified end-to-end via curl: POST 0.13s → poll shows 10%→35%→60%→85%→100% → done in 68s
+  with 4 CPMK, 16 pertemuan, 5 penilaian, 6 referensi
+- Verified via Agent Browser: full flow works — dialog → generate → real progress bar → preview → save → RPS detail
+  No 502 error, no console errors
+
+Stage Summary:
+- ✅ 502 Bad Gateway error completely resolved
+- ✅ POST returns immediately (0.13s) — no more gateway timeout
+- ✅ Real-time progress bar + step labels from server
+- ✅ Retry logic for 429 rate limiting
+- ✅ Full end-to-end flow verified: generate → preview → save → RPS detail with all tabs filled
+- ✅ Lint 0 errors, no browser console errors
