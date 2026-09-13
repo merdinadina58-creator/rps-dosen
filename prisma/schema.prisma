@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// RPS Dosen Management System - Prisma Schema
+// Database: SQLite
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +10,172 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
+// ===== Master Data =====
+
+model Dosen {
   id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
+  nama      String
+  nip       String?  @unique
+  email     String?  @unique
+  telepon   String?
+  prodi     String   // Program Studi
+  jabatan   String?  // e.g. Lektor, Asisten Ahli
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  rps       Rps[]
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model MataKuliah {
+  id            String   @id @default(cuid())
+  kode          String   @unique // e.g. IF-101
+  nama          String
+  sks           Int      // Jumlah SKS
+  semester      Int      // Semester ke berapa
+  prodi         String   // Program Studi
+  deskripsi     String?
+  prasyarat     String?  // Mata kuliah prasyarat (comma separated kode)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  rps           Rps[]
+}
+
+// ===== RPS Document =====
+
+model Rps {
+  id            String   @id @default(cuid())
+  judul         String   // e.g. "RPS Pemrograman Web - Semester Ganjil 2024/2025"
+  tahunAjaran   String   // e.g. "2024/2025"
+  semester      String   // "Ganjil" | "Genap"
+  kelas         String?  // e.g. "A", "B", "TI-3A"
+
+  // Identitas mata kuliah (snapshot - bisa juga diambil dari relasi)
+  mataKuliahId  String
+  mataKuliah    MataKuliah @relation(fields: [mataKuliahId], references: [id])
+
+  dosenId       String
+  dosen         Dosen     @relation(fields: [dosenId], references: [id])
+
+  // Deskripsi & capaian
+  deskripsi     String?
+  cpl           String?   // Capaian Pembelajaran Lulusan (text, bisa multi)
+  mingguPertemuan Int    @default(16) // Jumlah pertemuan, biasanya 16
+
+  // Pengaturan
+  status        String   @default("draft") // draft | final | revisi
+  kurikulum     String   @default("MBKM")  // e.g. MBKM, KKNI
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cpmk          Cpmk[]
+  pertemuan     Pertemuan[]
+  referensi     Referensi[]
+  penilaian     KomponenPenilaian[]
+}
+
+// ===== CPMK & Sub-CPMK =====
+
+model Cpmk {
+  id          String   @id @default(cuid())
+  rpsId       String
+  rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
+  kode        String   // e.g. "CPMK1", "CPMK2"
+  deskripsi   String   // Capaian pembelajaran mata kuliah
+  bobot       Int      @default(0) // persentase bobot (optional)
+  urutan      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subCpmk     SubCpmk[]
+  pertemuan   PertemuanCpmk[]
+}
+
+model SubCpmk {
+  id          String   @id @default(cuid())
+  cpmkId      String
+  cpmk        Cpmk      @relation(fields: [cpmkId], references: [id], onDelete: Cascade)
+  kode        String   // e.g. "Sub-CPMK1.1"
+  deskripsi   String
+  urutan      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  pertemuan   PertemuanSubCpmk[]
+}
+
+// ===== Rencana Pertemuan Mingguan =====
+
+model Pertemuan {
+  id            String   @id @default(cuid())
+  rpsId         String
+  rps           Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
+  mingguKe      Int      // 1..16
+  subCpmkUtama  String?  // ringkasan sub cpmk yang dibahas
+  materi        String?  // materi/bahasan
+  metode        String?  // metode pembelajaran: ceramah, diskusi, praktikum
+  aktivitasDosen  String?
+  aktivitasMhs    String?
+  pengalamanBelajar String?
+  indikatorPenilaian String?
+  bobotPenilaian Int    @default(0) // persentase
+  estimasiWaktu String? // e.g. "150 menit"
+  urutan        Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cpmk          PertemuanCpmk[]
+  subCpmk       PertemuanSubCpmk[]
+}
+
+// Junction tables untuk relasi many-to-many
+model PertemuanCpmk {
+  id          String   @id @default(cuid())
+  pertemuanId String
+  cpmkId      String
+  pertemuan   Pertemuan @relation(fields: [pertemuanId], references: [id], onDelete: Cascade)
+  cpmk        Cpmk      @relation(fields: [cpmkId], references: [id], onDelete: Cascade)
+}
+
+model PertemuanSubCpmk {
+  id          String   @id @default(cuid())
+  pertemuanId String
+  subCpmkId   String
+  pertemuan   Pertemuan @relation(fields: [pertemuanId], references: [id], onDelete: Cascade)
+  subCpmk     SubCpmk   @relation(fields: [subCpmkId], references: [id], onDelete: Cascade)
+}
+
+// ===== Referensi / Bahan Pustaka =====
+
+model Referensi {
+  id          String   @id @default(cuid())
+  rpsId       String
+  rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
+  jenis       String   @default("buku") // buku | jurnal | website | lainnya
+  judul       String
+  pengarang   String?
+  penerbit    String?
+  tahun       String?
+  isbn        String?
+  url         String?
+  isUtama     Boolean  @default(false) // buku utama atau pendukung
+  urutan      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ===== Komponen Penilaian =====
+
+model KomponenPenilaian {
+  id          String   @id @default(cuid())
+  rpsId       String
+  rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
+  nama        String   // e.g. "Tugas", "UTS", "UAS", "Praktikum", "Kehadiran"
+  bobot       Int      // persentase, total harus 100
+  bentuk      String?  // bentuk penilaian: lisan, tulisan, praktik
+  keterangan  String?
+  urutan      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
