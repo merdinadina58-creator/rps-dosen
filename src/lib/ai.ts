@@ -361,9 +361,12 @@ export async function generatePertemuan(input: GeneratePertemuanInput): Promise<
     .map((s) => `- ${s.kode} (${s.cpmkKode}): ${s.deskripsi}`)
     .join('\n')
 
-  const buildPrompt = (startWeek: number, endWeek: number) => {
+  const buildPrompt = (startWeek: number, endWeek: number, previousTopics?: string[]) => {
     const isUTS = endWeek >= 8 && startWeek <= 8
     const isUAS = endWeek >= 16
+    const previousTopicsSection = previousTopics && previousTopics.length > 0
+      ? `\n\n⚠️ TOPIK YANG SUDAH DIBAHAS DI PERTEMUAN SEBELUMNYA (minggu 1-${midPoint}):\n${previousTopics.map((t, i) => `  Minggu ${i + 1}: ${t}`).join('\n')}\n\nPENTING: JANGAN ulangi topik-topik di atas! Buat materi yang LEBIH LANJUT, mendalam, atau aplikatif.\nMisalnya: studi kasus, proyek, implementasi, evaluasi, topik turunan yang belum dibahas.\n`
+      : ''
     return `Buatkan rencana pertemuan minggu ke-${startWeek} sampai ke-${endWeek} (total ${endWeek - startWeek + 1} pertemuan) untuk mata kuliah berikut:
 
 Nama: ${input.namaMataKuliah}
@@ -375,13 +378,14 @@ ${cpmkText}
 
 Sub-CPMK:
 ${subCpmkText}
-
+${previousTopicsSection}
 Persyaratan:
 - Distribusikan Sub-CPMK ke pertemuan yang sesuai secara logis
 ${isUTS ? '- Pertemuan 8: UTS (bobot 25-30%)\n' : ''}${isUAS ? '- Pertemuan 16: UAS (bobot 25-30%)\n' : ''}- Metode: ceramah, diskusi, praktikum, demonstrasi, project-based learning, dll
 - Bobot penilaian logis (UTS/UAS bobot besar, tugas 5-10% per pertemuan)
 - Gunakan Bahasa Indonesia formal akademik
 - JANGAN berpanjang lebar — singkat dan padat (maks 2 kalimat per field)
+- Materi harus BERBEDA dari pertemuan sebelumnya (jangan ulangi topik yang sudah dibahas)
 
 WAJIB balas HANYA JSON valid (tanpa markdown code block):
 {
@@ -412,11 +416,16 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   )
   const firstHalf = (parsed1.pertemuan as PertemuanItem[]) || []
 
-  // Generate second half (midPoint+1 to total)
+  // Extract topics from first half to pass as context to second half (prevents repetition)
+  const firstHalfTopics = firstHalf
+    .sort((a, b) => a.mingguKe - b.mingguKe)
+    .map((p) => p.materi || '')
+
+  // Generate second half (midPoint+1 to total) — with previous topics as context
   const parsed2 = await createAndParseJson(
     [
       { role: 'assistant', content: 'Anda adalah ahli pedagogi di perguruan tinggi Indonesia. Balas HANYA dengan JSON valid.' },
-      { role: 'user', content: buildPrompt(midPoint + 1, total) },
+      { role: 'user', content: buildPrompt(midPoint + 1, total, firstHalfTopics) },
     ],
     `Pertemuan ${midPoint + 1}-${total}`
   )
