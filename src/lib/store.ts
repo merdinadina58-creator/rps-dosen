@@ -8,6 +8,7 @@ export type View =
   | 'mata-kuliah'
   | 'ai-assistant'
   | 'prodi'
+  | 'panduan'
 
 interface AppState {
   view: View

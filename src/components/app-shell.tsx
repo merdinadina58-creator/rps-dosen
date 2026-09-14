@@ -14,6 +14,7 @@ import {
   Moon,
   Sun,
   GraduationCap as LogoIcon,
+  HelpCircle,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -36,6 +37,7 @@ import { DosenView } from '@/components/views/dosen-view'
 import { MataKuliahView } from '@/components/views/mata-kuliah-view'
 import { AiAssistantView } from '@/components/views/ai-assistant-view'
 import { ProdiView } from '@/components/views/prodi-view'
+import { PanduanView } from '@/components/views/panduan-view'
 
 interface NavChild {
   id: View
@@ -64,6 +66,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   { id: 'ai-assistant', label: 'AI Assistant', icon: Sparkles },
   { id: 'prodi', label: 'Program Studi', icon: GraduationCap },
+  { id: 'panduan', label: 'Panduan', icon: HelpCircle },
 ]
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -273,6 +276,8 @@ function ViewRouter() {
       return <AiAssistantView />
     case 'prodi':
       return <ProdiView />
+    case 'panduan':
+      return <PanduanView />
     default:
       return <DashboardView />
   }

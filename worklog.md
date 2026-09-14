@@ -657,3 +657,46 @@ Stage Summary:
 - ✅ Preview tab has dedicated download section with status indicator
 - ✅ Validation dialog is context-aware (force only for Final, not download)
 - ✅ Error list in both dialog AND preview section guides user to fix issues
+
+---
+Task ID: 22
+Agent: main (orchestrator)
+Task: Buat panduan penggunaan aplikasi secara detail (in-app)
+
+Work Log:
+- Added 'panduan' to View type in store.ts
+- Added "Panduan" nav item (HelpCircle icon) to sidebar NAV_ITEMS in app-shell.tsx
+- Imported HelpCircle icon + PanduanView component + added case in ViewRouter
+- Created comprehensive PanduanView component (src/components/views/panduan-view.tsx):
+  * 10 accordion sections covering all features:
+    1. Pengenalan (intro + 4 feature cards)
+    2. Dashboard (stats, charts, quick actions)
+    3. Generate RPS dengan AI (9-step guide, web search tip)
+    4. RPS Detail — 6 Tab Editor (tab descriptions)
+    5. Status RPS (Draft/Final/Revisi + validation warning)
+    6. Clone RPS (7-step guide + what gets copied)
+    7. Export DOCX/PDF (preview gate + completeness requirement)
+    8. AI Assistant (chat + example questions)
+    9. Master Data (Dosen & Mata Kuliah)
+    10. Tips & Best Practices (7 numbered tips)
+  * Quick Start section (3-step getting started with action buttons)
+  * FAQ section (6 Q&A covering common questions)
+  * Reusable components: FeatureCard, StepList, InfoBox, TabItem, StatusCard, TipItem, QuickStartStep, FaqItem
+  * Collapsible accordion (default: first section open)
+  * Color-coded section icons
+
+Verification:
+- Panduan button appears in sidebar (ref=e21)
+- Click → page loads with 10 sections visible
+- Accordion expand/collapse works (tested section 2)
+- FAQ section shows 6 Q&As with answers
+- Quick Start section has 3 steps with action links
+- Lint: 0 errors
+
+Stage Summary:
+- ✅ Comprehensive in-app user guide created (10 sections + Quick Start + FAQ)
+- ✅ Accessible from sidebar ("Panduan" with HelpCircle icon)
+- ✅ Collapsible accordion for easy navigation
+- ✅ Covers ALL features: Generate AI, 6 tabs, Status, Clone, Export, AI Chat, Master Data, Prodi
+- ✅ Includes step-by-step instructions, tips, and FAQ
+- ✅ Quick Start section with action links to jump to relevant pages
