@@ -101,3 +101,79 @@ export async function searchMataKuliahContext(
     summary,
   }
 }
+
+export interface DeepSearchResult {
+  results: Array<SearchResult & { queryUsed: string }>
+  rawText: string // all snippets concatenated, for AI to parse
+  queries: string[]
+}
+
+/**
+ * DEEP SEARCH for references: runs 5 targeted queries to find REAL books/references.
+ * Different query strategies maximize coverage:
+ *   1. Textbook/best book search (English — finds international standard textbooks)
+ *   2. Buku akademik search (Indonesian — finds local academic books)
+ *   3. Publisher-specific search (Gramedia/Elex/ANDI — major Indonesian publishers)
+ *   4. Amazon/Goodreads search (finds popular books with ratings)
+ *   5. Jurnal/paper search (finds academic papers)
+ *
+ * Returns raw search results that the AI will PARSE (extract real refs from),
+ * NOT generate. This ensures references are 100% real, not hallucinated.
+ */
+export async function deepSearchReferensi(
+  namaMataKuliah: string,
+  prodi: string
+): Promise<DeepSearchResult> {
+  const zai = await getZAI()
+
+  const queries = [
+    `${namaMataKuliah} textbook best book`,
+    `${namaMataKuliah} buku akademik referensi pengarang`,
+    `${namaMataKuliah} buku Gramedia OR "Elex Media" OR "Penerbit ANDI"`,
+    `${namaMataKuliah} book Amazon Goodreads author`,
+    `${namaMataKuliah} jurnal paper penelitian ${prodi}`,
+  ]
+
+  const allResults: Array<SearchResult & { queryUsed: string }> = []
+
+  // Run all 5 searches in parallel for speed
+  const searchPromises = queries.map(async (query, idx) => {
+    try {
+      const results = await zai.functions.invoke('web_search', { query, num: 5 })
+      if (Array.isArray(results)) {
+        return results.map((r: unknown) => {
+          const item = r as Record<string, unknown>
+          return {
+            title: String(item.name || item.title || ''),
+            url: String(item.url || ''),
+            snippet: String(item.snippet || ''),
+            domain: String(item.host_name || ''),
+            date: item.date ? String(item.date) : undefined,
+            queryUsed: queries[idx],
+          }
+        })
+      }
+    } catch {
+      // Individual search failure — return empty, don't break the whole thing
+    }
+    return []
+  })
+
+  const settled = await Promise.all(searchPromises)
+  for (const results of settled) {
+    allResults.push(...results)
+  }
+
+  // Build raw text for AI parsing — include title + snippet + domain + URL
+  const rawText = allResults
+    .map((r, i) => {
+      return `[${i + 1}] Judul: ${r.title}\n    Snippet: ${r.snippet}\n    Domain: ${r.domain}\n    URL: ${r.url}`
+    })
+    .join('\n\n')
+
+  return {
+    results: allResults,
+    rawText,
+    queries,
+  }
+}

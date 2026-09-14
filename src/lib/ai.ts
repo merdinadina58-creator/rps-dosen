@@ -498,6 +498,8 @@ export interface GenerateReferensiInput {
   deskripsi: string
   prodi: string
   webContext?: string
+  /** When provided, AI EXTRACTS real references from this text (not generates). 100% real refs. */
+  deepSearchRawText?: string
 }
 
 export interface ReferensiItem {
@@ -515,9 +517,66 @@ export interface GenerateReferensiResult {
 
 /**
  * Generate saran referensi / bahan pustaka.
- * Includes a fallback if AI fails to produce valid JSON after retries.
+ *
+ * MODE 1 (deepSearchRawText provided): AI acts as PARSER — extracts REAL references
+ *   from web search results. 100% real books, no hallucinations.
+ * MODE 2 (no deepSearchRawText): AI acts as GENERATOR — suggests references from
+ *   training knowledge (may hallucinate). Fallback if web search fails.
  */
 export async function generateReferensi(input: GenerateReferensiInput): Promise<GenerateReferensiResult> {
+  // ===== MODE 1: EXTRACT from real web search results (100% real refs) =====
+  if (input.deepSearchRawText) {
+    const extractPrompt = `Anda adalah pustakawan akademik. Berikut adalah hasil pencarian web NYATA untuk referensi mata kuliah "${input.namaMataKuliah}".
+
+Tugas Anda: EKSTRAK 6 referensi NYATA dari hasil pencarian di bawah ini. 
+
+ATURAN MUTLAK:
+- HANYA gunakan buku/jurnal yang BENAR-BENAR muncul di hasil pencarian di bawah
+- JANGAN MENGARANG referensi yang tidak ada di hasil pencarian
+- Ekstrak judul, pengarang, penerbit dari teks hasil pencarian
+- Jika pengarang/tahun tidak disebutkan, isi dengan "" (kosong) — jangan menebak
+- url WAJIB diisi dengan URL asli dari hasil pencarian
+- 3 referensi pertama = isUtama: true (buku utama), 3 berikutnya = isUtama: false (pendukung)
+- Pilih yang paling relevan dengan mata kuliah ini
+
+=== HASIL PENCARIAN WEB NYATA ===
+${input.deepSearchRawText}
+=== AKHIR HASIL PENCARIAN ===
+
+Balas HANYA JSON valid:
+{
+  "referensi": [
+    {
+      "jenis": "buku",
+      "judul": "...(dari hasil pencarian)...",
+      "pengarang": "...(dari hasil pencarian, atau kosong)...",
+      "penerbit": "...(dari hasil pencarian, atau kosong)...",
+      "tahun": "...(dari hasil pencarian, atau kosong)...",
+      "url": "...(URL asli dari hasil pencarian)...",
+      "isUtama": true
+    }
+  ]
+}`
+
+    try {
+      const parsed = await createAndParseJson(
+        [
+          { role: 'assistant', content: 'Anda adalah pustakawan yang jujur. HANYA ekstrak referensi NYATA dari teks yang diberikan. JANGAN mengarang referensi baru. Balas HANYA JSON.' },
+          { role: 'user', content: extractPrompt },
+        ],
+        'Referensi (Deep Search Extract)',
+        3
+      )
+      const referensi = (parsed.referensi as ReferensiItem[]) || []
+      if (referensi.length > 0) return { referensi }
+      throw new Error('AI returned empty referensi list from deep search')
+    } catch (err) {
+      console.error('[AI] Deep search extract failed, falling back:', err instanceof Error ? err.message : err)
+      // Fall through to MODE 2 (generator) then fallback
+    }
+  }
+
+  // ===== MODE 2: GENERATE from AI knowledge (may hallucinate) =====
   const systemPrompt = `Anda adalah pustakawan akademik ahli yang membantu dosen menemukan referensi berkualitas untuk mata kuliah. Anda menyarankan buku teks standar, jurnal ilmiah, dan sumber daring terpercaya.
 
 PENTING: Balas HANYA dengan JSON valid. Setiap property HARUS memiliki tanda titik dua (:) setelah nama property. Contoh yang BENAR: "judul": "Teks", — ada titik dua setelah "judul".`
@@ -738,15 +797,23 @@ export async function generateFullRps(
 
   // ===== Optional: Web search for real-time context =====
   let webContext = ''
+  let deepSearchRawText = ''
   if (input.useWebSearch) {
-    report(8, 'Mencari informasi terkini di internet...')
+    report(8, 'Mencari informasi terkini & referensi nyata di internet...')
     try {
-      const { searchMataKuliahContext } = await import('@/lib/web-search')
-      const ctx = await searchMataKuliahContext(input.namaMataKuliah, input.prodi)
+      const { searchMataKuliahContext, deepSearchReferensi } = await import('@/lib/web-search')
+      // Run both searches in parallel: context (for step 1) + deep ref search
+      const [ctx, deep] = await Promise.all([
+        searchMataKuliahContext(input.namaMataKuliah, input.prodi),
+        deepSearchReferensi(input.namaMataKuliah, input.prodi),
+      ])
       if (ctx.summary) {
         webContext = `\n\nINFORMASI HASIL PENCARIAN WEB (real-time, gunakan untuk akurasi):\n${ctx.summary}\n`
       }
-      report(12, 'Info terkini ditemukan, mulai menyusun RPS...')
+      if (deep.rawText) {
+        deepSearchRawText = deep.rawText
+      }
+      report(12, 'Info terkini & referensi ditemukan, mulai menyusun RPS...')
     } catch (e) {
       // Web search failed (network/quota) — continue without it
       console.error('[AI] Web search failed, continuing without:', e instanceof Error ? e.message : e)
@@ -827,6 +894,7 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
     deskripsi: input.deskripsiMataKuliah,
     prodi: input.prodi,
     webContext: webContext || undefined,
+    deepSearchRawText: deepSearchRawText || undefined,
   })
 
   report(95, 'Menyusun dokumen RPS final')

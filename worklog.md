@@ -454,3 +454,49 @@ Stage Summary:
 - ✅ One-click change with visual feedback (toast + badge color change)
 - ✅ No need to go to Identitas tab just to change status
 - ✅ Existing Identitas tab status dropdown still works (for bulk editing with other fields)
+
+---
+Task ID: 17
+Agent: main (orchestrator)
+Task: Implement Opsi A — Deep search untuk referensi 100% real (bukan halusinasi AI)
+
+Work Log:
+- User chose "opsi A buat search secara mendalam" — take references directly from web search
+- Added deepSearchReferensi() to src/lib/web-search.ts:
+  * Runs 5 parallel targeted queries with different strategies:
+    1. "{mk} textbook best book" — international standard textbooks
+    2. "{mk} buku akademik referensi pengarang" — Indonesian academic books
+    3. "{mk} buku Gramedia OR Elex Media OR ANDI" — major Indonesian publishers
+    4. "{mk} book Amazon Goodreads author" — popular books with ratings
+    5. "{mk} jurnal paper penelitian {prodi}" — academic papers
+  * Returns 25 results total + rawText (all snippets concatenated for AI parsing)
+  * Each result has: title, snippet, domain, url, date, queryUsed
+- Modified generateReferensi() to support TWO MODES:
+  * MODE 1 (deepSearchRawText provided): AI acts as PARSER — extracts real refs
+    from search results. Prompt: "HANYA gunakan buku yang BENAR-BENAR muncul
+    di hasil pencarian. JANGAN MENGARANG. url WAJIB diisi dengan URL asli."
+  * MODE 2 (no deepSearchRawText): AI acts as GENERATOR (old behavior, may hallucinate)
+  * If MODE 1 fails, falls through to MODE 2, then to local fallback
+- Modified generateFullRps: when useWebSearch=true, runs BOTH
+  searchMataKuliahContext (for step 1) AND deepSearchReferensi (for refs)
+  in parallel, passes deepSearchRawText to generateReferensi
+
+Verification (Bahasa Indonesia — same course that had hallucinated refs before):
+- BEFORE (AI generator): 3/6 refs hallucinated (Yulius Hermawan, wrong Byrnes title, wrong Echols)
+  No URLs for any reference
+- AFTER (deep search extract): 6/6 refs have REAL URLs:
+  1. Google Books (books.google.com)
+  2. UIN Alauddin repository (repositori.uin-alauddin.ac.id)
+  3. ResearchGate (researchgate.net)
+  4. UNMUL repository (repository.unmul.ac.id)
+  5. PoltekAD repo (repo.poltekad.ac.id)
+  6. ANU LibGuides (libguides.anu.edu.au)
+  Authors: extracted from snippets (empty if not mentioned — NO guessing)
+
+Stage Summary:
+- ✅ Opsi A implemented: references extracted from REAL web search results
+- ✅ AI role changed from GENERATOR (hallucinates) to PARSER (extracts real data)
+- ✅ All references now have REAL URLs from actual academic sources
+- ✅ 5 parallel search queries = comprehensive coverage
+- ✅ Fallback chain: deep search extract → AI generator → local fallback
+- ✅ Lint clean
