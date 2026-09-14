@@ -879,3 +879,37 @@ Stage Summary:
 - ✅ API, UI, and Export all follow OBE structure
 - ✅ Existing RPS records gracefully show null fields as "-"
 - ✅ New AI-generated RPS will populate all OBE fields automatically
+
+---
+Task ID: OBE-2
+Agent: main (orchestrator)
+Task: Make export SAMA PERSIS dengan template OBE (border, merged cells, struktur)
+
+Work Log:
+- Analyzed template structure: 77 rows × 34 cols, border=single sz=4 auto, complex merged cells (gridSpan + vMerge)
+- Instead of rebuilding with docx-js (which can't perfectly replicate merged cells), used CLONE-AND-FILL approach:
+  * Created Python script scripts/fill-rps-template.py
+  * Opens the ORIGINAL template DOCX (templates/rps-obe-template.docx)
+  * Fills in data cells using python-docx (preserves ALL formatting: borders, merged cells, column widths, fonts)
+  * Saves as new DOCX — pixel-perfect identical to template
+- Copied template to templates/rps-obe-template.docx
+- Added generateRpsDocxOBE() in src/lib/export.ts — calls Python script with RPS data as JSON
+- Updated export route to use generateRpsDocxOBE instead of generateRpsDocx
+- Fixed all 3 gaps:
+  1. ✅ UTS/UAS special rows — Row 67: "Ujian Tengah Semester", Row 75: "Ujian Akhir Semester" (no mingguKe number)
+  2. ✅ Korelasi total row — Row 48 has column totals + total bobot + total minggu
+  3. ✅ Multi-CPL matrix — korelasi rendered as matrix (Sub-CPMK rows × CPL columns)
+
+Verification:
+- DOCX export: HTTP 200, 582KB (template-size, not mini docx-js), 2 seconds
+- PDF export: HTTP 200, 505KB, 2 seconds (via LibreOffice conversion)
+- Structure check: 77 rows × 34 cols (EXACT same as template)
+- Data filled: MK name, Kode, Rumpun, T/P SKS, CPL Prodi, CPMK, Sub-CPMK, Korelasi, Deskripsi, Bahan Kajian, Pustaka, Media, Team Teaching, Pertemuan with OBE columns, UTS/UAS special rows, Total Bobot=100
+- Borders: single sz=4 auto (IDENTICAL to template — using template's actual borders)
+- Merged cells: gridSpan + vMerge (IDENTICAL to template — using template's actual structure)
+
+Stage Summary:
+- ✅ Export now SAMA PERSIS dengan template OBE — clone-and-fill approach preserves ALL formatting
+- ✅ 3 gaps fixed (UTS/UAS rows, korelasi total, multi-CPL matrix)
+- ✅ Border, merged cells, column widths — all from original template
+- ✅ Both DOCX and PDF work

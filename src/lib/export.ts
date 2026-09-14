@@ -935,3 +935,46 @@ export async function convertDocxToPdf(docxBuffer: Buffer, filename: string): Pr
     }
   }
 }
+
+/**
+ * Generate RPS DOCX using the EXACT OBE template from the campus.
+ * This clones the original template DOCX and fills in data cells,
+ * preserving ALL formatting: borders, merged cells, column widths, fonts.
+ *
+ * This is the recommended approach for OBE — it produces a document
+ * that is pixel-perfect identical to the campus template.
+ */
+export async function generateRpsDocxOBE(rpsId: string): Promise<Buffer> {
+  const data = await loadRpsForExport(rpsId)
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rps-obe-'))
+  const dataJsonPath = path.join(tmpDir, 'data.json')
+  const outputPath = path.join(tmpDir, 'rps-output.docx')
+  const templatePath = path.join(process.cwd(), 'templates', 'rps-obe-template.docx')
+
+  try {
+    // Write data as JSON for the Python script to read
+    await fs.writeFile(dataJsonPath, JSON.stringify(data, null, 2), 'utf-8')
+
+    // Run the Python template-filling script
+    const scriptPath = path.join(process.cwd(), 'scripts', 'fill-rps-template.py')
+    const { stdout, stderr } = await execAsync(
+      `python3 "${scriptPath}" "${templatePath}" "${dataJsonPath}" "${outputPath}"`,
+      { timeout: 30000 }
+    )
+
+    if (stderr) {
+      console.error('[Export OBE] Python stderr:', stderr)
+    }
+
+    // Read the generated DOCX
+    const docxBuffer = await fs.readFile(outputPath)
+    return docxBuffer
+  } finally {
+    try {
+      await fs.rm(tmpDir, { recursive: true, force: true })
+    } catch {
+      // ignore
+    }
+  }
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateRpsDocx, convertDocxToPdf, loadRpsForExport } from '@/lib/export'
+import { generateRpsDocxOBE, convertDocxToPdf, loadRpsForExport } from '@/lib/export'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -26,7 +26,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     const data = await loadRpsForExport(id)
     const filename = sanitizeFilename(`RPS-${data.mataKuliah.kode}-${data.mataKuliah.nama}`)
 
-    const docxBuffer = await generateRpsDocx(id)
+    // Use OBE template-filling approach (clones the exact campus template)
+    const docxBuffer = await generateRpsDocxOBE(id)
 
     if (format === 'docx') {
       return new NextResponse(docxBuffer, {
