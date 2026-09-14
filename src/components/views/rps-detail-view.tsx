@@ -19,6 +19,7 @@ import {
   CircleDot,
   CheckCircle2,
   AlertCircle,
+  Copy,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -63,6 +64,7 @@ import {
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { RpsFormDialog } from '@/components/rps-form-dialog'
+import { CloneRpsDialog } from '@/components/clone-rps-dialog'
 import { IdentitasTab } from '@/components/views/tabs/identitas-tab'
 import { CpmkTab } from '@/components/views/tabs/cpmk-tab'
 import { PertemuanTab } from '@/components/views/tabs/pertemuan-tab'
@@ -78,12 +80,13 @@ interface Props {
 }
 
 export function RpsDetailView({ rpsId }: Props) {
-  const { setView } = useAppStore()
+  const { setView, openRps } = useAppStore()
   const queryClient = useQueryClient()
 
   const [tab, setTab] = useState('identitas')
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [cloneOpen, setCloneOpen] = useState(false)
   const [exporting, setExporting] = useState<'docx' | 'pdf' | null>(null)
   const [finalValidation, setFinalValidation] = useState<ValidationResult | null>(null)
 
@@ -337,6 +340,15 @@ export function RpsDetailView({ rpsId }: Props) {
               <Button
                 variant="outline"
                 size="sm"
+                className="text-primary hover:text-primary hover:bg-primary/10"
+                onClick={() => setCloneOpen(true)}
+                title="Clone RPS ke semester baru"
+              >
+                <Copy className="size-4 mr-1" /> Clone
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
                 onClick={() => setDeleteOpen(true)}
               >
@@ -437,6 +449,18 @@ export function RpsDetailView({ rpsId }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Clone dialog — copy RPS to new semester */}
+      {rps && (
+        <CloneRpsDialog
+          open={cloneOpen}
+          onOpenChange={setCloneOpen}
+          rps={rps}
+          onCloned={(newId) => {
+            openRps(newId)
+          }}
+        />
+      )}
 
       {/* Validation dialog when trying to set Final on incomplete RPS */}
       <Dialog open={!!finalValidation} onOpenChange={(o) => !o && setFinalValidation(null)}>

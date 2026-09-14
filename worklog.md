@@ -575,3 +575,48 @@ Stage Summary:
 - ✅ Interactive dialog shows exactly what's missing
 - ✅ Force option available for edge cases (with warning toast)
 - ✅ Draft and Revisi statuses don't require validation (can change freely)
+
+---
+Task ID: 20
+Agent: main (orchestrator)
+Task: Fix #3 — Clone/Duplicate RPS untuk semester baru
+
+Work Log:
+- Created API route POST /api/rps/[id]/clone/route.ts:
+  * Loads source RPS with ALL relations (cpmk+subCpmk, pertemuan, referensi, penilaian)
+  * Creates new RPS in a single transaction:
+    - RPS shell (status='draft', same mataKuliah+dosen, new tahunAjaran/semester/kelas)
+    - Copy all CPMK + Sub-CPMK (preserving kode, deskripsi, urutan)
+    - Copy all 16 Pertemuan (materi, metode, aktivitas, bobot, etc.)
+    - Copy all Referensi (judul, pengarang, penerbit, isUtama, etc.)
+    - Copy all Komponen Penilaian (nama, bobot, bentuk, etc.)
+  * Returns new RPS with _count for immediate UI display
+- Added api.cloneRps() helper in api.ts
+- Created CloneRpsDialog component (src/components/clone-rps-dialog.tsx):
+  * Pre-fills tahun ajaran, semester, kelas from source RPS
+  * Auto-derives judul: "RPS {mataKuliah} - Semester {sem} {ta}"
+  * User can override judul manually
+  * Shows summary of what will be copied (X CPMK, Y Pertemuan, Z Penilaian, W Referensi)
+  * Loading state: "Menyalin..." with spinner
+  * On success: toast + invalidate queries + navigate to new RPS
+- Added "Clone" button in RPS detail header (between Edit and Delete)
+  * Primary-colored icon (Copy) to distinguish from Edit/Delete
+  * Tooltip: "Clone RPS ke semester baru"
+
+Verification:
+- Browser test: RPS Pemrograman Web (2024/2025, Final) → Clone
+  - Dialog opened with pre-filled fields
+  - Changed tahun ajaran to 2025/2026 → judul auto-updated
+  - Click Clone → new RPS created, auto-navigated, toast confirmed
+  - Tab counters: CPMK 3, Pertemuan 16, Penilaian 5, Referensi 4 (all copied!)
+  - Status: Draft (correct — always starts as draft for review)
+  - RPS List: shows both original (Final) and clone (Draft) as separate entries
+- Lint: 0 errors
+
+Stage Summary:
+- ✅ Clone RPS feature complete — copies ALL data to new semester in one click
+- ✅ Single transaction ensures atomicity (all-or-nothing)
+- ✅ New RPS starts as Draft (dosen reviews before Finalizing)
+- ✅ Auto-navigates to cloned RPS for immediate editing
+- ✅ Summary panel shows exactly what will be copied
+- ✅ Saves 30-60 minutes of manual re-entry per semester

@@ -228,6 +228,8 @@ export const api = {
     fetchJson<Rps>(`/api/rps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteRps: (id: string) =>
     fetchJson<{ success: boolean }>(`/api/rps/${id}`, { method: 'DELETE' }),
+  cloneRps: (id: string, data: { tahunAjaran: string; semester: string; kelas?: string | null; judul?: string }) =>
+    fetchJson<Rps>(`/api/rps/${id}/clone`, { method: 'POST', body: JSON.stringify(data) }),
 
   // CPMK
   listCpmk: (rpsId: string) => fetchJson<Cpmk[]>(`/api/rps/${rpsId}/cpmk`),
