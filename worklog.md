@@ -420,3 +420,37 @@ Stage Summary:
 - ✅ Silabus/CPMK context from web improves accuracy
 - ✅ Graceful fallback: if web search fails, continues without context
 - ✅ Only ~5s extra time for significantly better quality
+
+---
+Task ID: 16
+Agent: main (orchestrator)
+Task: Tambah quick status change (draft/final/revisi) di RPS detail header
+
+Work Log:
+- User asked "bagaimana membuat status agar bisa final draft dan revisi?"
+- Checked current implementation: status only changeable via Identitas tab dropdown + Save button
+- Added quick status change dropdown directly in RPS detail header:
+  * StatusBadge is now a clickable dropdown trigger (with ChevronDown icon)
+  * Dropdown shows 3 options with icons + descriptions:
+    - Draft (amber CircleDot) — "Masih dalam penyusunan"
+    - Final (emerald CheckCircle2) — "Siap digunakan"
+    - Revisi (rose AlertCircle) — "Perlu perbaikan"
+  * Current status shows checkmark, disabled (can't reselect same status)
+  * Loading state: disabled while mutation pending
+- Added statusMut (useMutation) that calls api.updateRps(rpsId, {status})
+  * On success: toast "Status RPS diubah ke: Final/Revisi/Draft"
+  * Invalidates queries: ['rps', rpsId], ['rps'], ['stats']
+- Imported DropdownMenu components + ChevronDown/CircleDot/CheckCircle2/AlertCircle icons
+
+Verification:
+- Browser test: RPS detail → status badge "Draft" → click → dropdown opens
+  → click "Final" → badge changes to "Final" + toast "Status RPS diubah ke: Final"
+  → click again → click "Revisi" → badge changes to "Revisi" + toast confirms
+- All 3 statuses work (Draft → Final → Revisi)
+- Lint: 0 errors
+
+Stage Summary:
+- ✅ Quick status change (draft/final/revisi) now available via dropdown in RPS detail header
+- ✅ One-click change with visual feedback (toast + badge color change)
+- ✅ No need to go to Identitas tab just to change status
+- ✅ Existing Identitas tab status dropdown still works (for bulk editing with other fields)

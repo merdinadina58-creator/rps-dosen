@@ -15,6 +15,10 @@ import {
   Users,
   BookOpen,
   Sparkles,
+  ChevronDown,
+  CircleDot,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -41,7 +45,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { StatusBadge } from '@/components/status-badge'
+import { StatusBadge, type RpsStatus } from '@/components/status-badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { RpsFormDialog } from '@/components/rps-form-dialog'
 import { IdentitasTab } from '@/components/views/tabs/identitas-tab'
 import { CpmkTab } from '@/components/views/tabs/cpmk-tab'
@@ -79,6 +91,19 @@ export function RpsDetailView({ rpsId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['stats'] })
       setDeleteOpen(false)
       setView('rps-list')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // Quick status change mutation — updates RPS status to draft/final/revisi
+  const statusMut = useMutation({
+    mutationFn: (newStatus: RpsStatus) =>
+      api.updateRps(rpsId, { status: newStatus }),
+    onSuccess: (updated) => {
+      toast.success(`Status RPS diubah ke: ${updated.status === 'final' ? 'Final' : updated.status === 'revisi' ? 'Revisi' : 'Draft'}`)
+      queryClient.invalidateQueries({ queryKey: ['rps', rpsId] })
+      queryClient.invalidateQueries({ queryKey: ['rps'] })
+      queryClient.invalidateQueries({ queryKey: ['stats'] })
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -167,7 +192,55 @@ export function RpsDetailView({ rpsId }: Props) {
                 <div className="min-w-0">
                   <h1 className="text-xl font-bold tracking-tight">{rps.judul}</h1>
                   <div className="flex flex-wrap items-center gap-2 mt-1.5 text-sm">
-                    <StatusBadge status={rps.status} />
+                    {/* Quick status change dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="inline-flex items-center gap-1.5 rounded-full border-0 cursor-pointer transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1">
+                          <StatusBadge status={rps.status} />
+                          <ChevronDown className="size-3 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-48">
+                        <DropdownMenuLabel className="text-xs">Ubah Status RPS</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => statusMut.mutate('draft')}
+                          disabled={statusMut.isPending || rps.status === 'draft'}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <CircleDot className="size-4 text-amber-500" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">Draft</p>
+                            <p className="text-xs text-muted-foreground">Masih dalam penyusunan</p>
+                          </div>
+                          {rps.status === 'draft' && <CheckCircle2 className="size-4 text-emerald-500" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => statusMut.mutate('final')}
+                          disabled={statusMut.isPending || rps.status === 'final'}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <CheckCircle2 className="size-4 text-emerald-500" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">Final</p>
+                            <p className="text-xs text-muted-foreground">Siap digunakan</p>
+                          </div>
+                          {rps.status === 'final' && <CheckCircle2 className="size-4 text-emerald-500" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => statusMut.mutate('revisi')}
+                          disabled={statusMut.isPending || rps.status === 'revisi'}
+                          className="gap-2 cursor-pointer"
+                        >
+                          <AlertCircle className="size-4 text-rose-500" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">Revisi</p>
+                            <p className="text-xs text-muted-foreground">Perlu perbaikan</p>
+                          </div>
+                          {rps.status === 'revisi' && <CheckCircle2 className="size-4 text-emerald-500" />}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <Badge variant="secondary" className="font-mono">
                       {rps.mataKuliah.kode}
                     </Badge>
