@@ -340,3 +340,36 @@ Stage Summary:
 - ✅ Reusable useAsyncAiJob hook (clean, DRY)
 - ✅ Generic /api/ai/job/[jobId] status endpoint shared by all AI jobs
 - ✅ No more "selalu gagal" — all Generate AI buttons work reliably
+
+---
+Task ID: 14
+Agent: main (orchestrator)
+Task: Fix "Total Bobot Penilaian 145%" — normalize AI-generated bobot to 100%
+
+Work Log:
+- User asked "ini sampai ada 145% apa maksudnya ya" with screenshot
+- VLM analysis: 145% appeared in "Rencana Pembelajaran Mingguan" tab → "Total Bobot Penilaian" label
+  with warning "⚠ Total bobot seharusnya 100% (saat ini 145%)"
+- Root cause: AI generates bobotPenilaian (weekly assessment weights) that sum to >100%
+  (e.g., UTS 25% + UAS 30% + tugas 5-10% × 14 weeks = 145%). The weekly weights SHOULD sum to 100%
+  but AI doesn't enforce this constraint.
+- Fix: Added two normalization functions in src/lib/ai.ts:
+  1. normalizeBobotPenilaian(pertemuan): scales weekly weights proportionally so sum = exactly 100%
+     - Scale factor = 100 / actualTotal
+     - Round each to nearest integer
+     - Adjust the largest-weight week to absorb rounding diff
+  2. normalizePenilaianBobot(penilaian): same approach for assessment components (Kehadiran/Tugas/UTS/UAS)
+- Applied normalizeBobotPenilaian in generatePertemuan() (covers both per-tab and full-rps flows)
+- Applied normalizePenilaianBobot in generateFullRps() step1 result processing
+
+Verification:
+- generate-pertemuan test: 16 pertemuan, total bobot = 100% (was 145%+)
+  Distribution: 4,4,4,4,4,4,4,20(UTS),4,4,4,4,4,4,8,20(UAS) = 100
+- generate-full-rps test: both totals = 100%
+  Pertemuan: 100% | Penilaian: Kehadiran 10%, Tugas 20%, Proyek 20%, UTS 25%, UAS 25% = 100%
+
+Stage Summary:
+- ✅ "Total Bobot Penilaian 145%" issue resolved — now always exactly 100%
+- ✅ Both weekly weights AND assessment components normalized
+- ✅ Proportional scaling preserves relative importance (UTS/UAS stay biggest)
+- ✅ Lint clean, no errors

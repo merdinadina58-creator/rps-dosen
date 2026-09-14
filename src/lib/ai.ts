@@ -422,7 +422,75 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   )
   const secondHalf = (parsed2.pertemuan as PertemuanItem[]) || []
 
-  return { pertemuan: [...firstHalf, ...secondHalf] }
+  const allPertemuan = [...firstHalf, ...secondHalf]
+  // Normalize bobotPenilaian so total = exactly 100%
+  // AI often generates weights that sum to >100% or <100%; scale proportionally.
+  return { pertemuan: normalizeBobotPenilaian(allPertemuan) }
+}
+
+/**
+ * Normalize bobotPenilaian values so they sum to exactly 100%.
+ * AI often produces weights that sum to 80-160% instead of 100%.
+ * Strategy: scale proportionally, round to integers, then adjust the
+ * largest-weight week to absorb rounding errors so the total is exactly 100.
+ */
+function normalizeBobotPenilaian(pertemuan: PertemuanItem[]): PertemuanItem[] {
+  if (pertemuan.length === 0) return pertemuan
+
+  const total = pertemuan.reduce((sum, p) => sum + (Number(p.bobotPenilaian) || 0), 0)
+  if (total === 0) return pertemuan // can't normalize zeros
+  if (total === 100) return pertemuan // already correct
+
+  // Scale each weight proportionally to sum=100, round to nearest integer
+  const scale = 100 / total
+  const scaled = pertemuan.map((p) => ({
+    ...p,
+    bobotPenilaian: Math.max(0, Math.round((Number(p.bobotPenilaian) || 0) * scale)),
+  }))
+
+  // Fix rounding error: adjust the largest-weight week so total = exactly 100
+  const newTotal = scaled.reduce((sum, p) => sum + p.bobotPenilaian, 0)
+  const diff = 100 - newTotal
+  if (diff !== 0 && scaled.length > 0) {
+    // Find the week with the largest weight (excluding UTS/UAS weeks which are already big)
+    let maxIdx = 0
+    for (let i = 1; i < scaled.length; i++) {
+      if (scaled[i].bobotPenilaian > scaled[maxIdx].bobotPenilaian) maxIdx = i
+    }
+    scaled[maxIdx].bobotPenilaian = Math.max(0, scaled[maxIdx].bobotPenilaian + diff)
+  }
+
+  return scaled
+}
+
+/**
+ * Normalize komponen penilaian bobot so they sum to exactly 100%.
+ * Same proportional-scaling approach as normalizeBobotPenilaian.
+ */
+function normalizePenilaianBobot<T extends { bobot: number; nama: string }>(
+  items: T[]
+): T[] {
+  if (items.length === 0) return items
+  const total = items.reduce((sum, p) => sum + (Number(p.bobot) || 0), 0)
+  if (total === 0) return items
+  if (total === 100) return items
+
+  const scale = 100 / total
+  const scaled = items.map((p) => ({
+    ...p,
+    bobot: Math.max(0, Math.round((Number(p.bobot) || 0) * scale)),
+  }))
+  const newTotal = scaled.reduce((sum, p) => sum + p.bobot, 0)
+  const diff = 100 - newTotal
+  if (diff !== 0) {
+    // Adjust the largest-weight component
+    let maxIdx = 0
+    for (let i = 1; i < scaled.length; i++) {
+      if (scaled[i].bobot > scaled[maxIdx].bobot) maxIdx = i
+    }
+    scaled[maxIdx].bobot = Math.max(0, scaled[maxIdx].bobot + diff)
+  }
+  return scaled
 }
 
 export interface GenerateReferensiInput {
@@ -757,12 +825,14 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
       estimasiWaktu: String(p.estimasiWaktu ?? '150 menit'),
     })),
     penilaian: Array.isArray(step1Raw.penilaian)
-      ? step1Raw.penilaian.map((p: Record<string, unknown>) => ({
-          nama: String(p.nama ?? ''),
-          bobot: Number(p.bobot) || 0,
-          bentuk: String(p.bentuk ?? ''),
-          keterangan: String(p.keterangan ?? ''),
-        }))
+      ? normalizePenilaianBobot(
+          step1Raw.penilaian.map((p: Record<string, unknown>) => ({
+            nama: String(p.nama ?? ''),
+            bobot: Number(p.bobot) || 0,
+            bentuk: String(p.bentuk ?? ''),
+            keterangan: String(p.keterangan ?? ''),
+          }))
+        )
       : [],
     referensi: referensiResult.referensi.map((r) => ({
       jenis: String(r.jenis ?? 'buku'),
