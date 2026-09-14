@@ -497,6 +497,7 @@ export interface GenerateReferensiInput {
   namaMataKuliah: string
   deskripsi: string
   prodi: string
+  webContext?: string
 }
 
 export interface ReferensiItem {
@@ -526,7 +527,7 @@ PENTING: Balas HANYA dengan JSON valid. Setiap property HARUS memiliki tanda tit
 Nama: ${input.namaMataKuliah}
 Deskripsi: ${input.deskripsi}
 Program Studi: ${input.prodi}
-
+${input.webContext ? `\n${input.webContext}\n` : ''}
 Format WAJIB (perhatikan tanda titik dua setelah setiap nama property):
 {
   "referensi": [
@@ -661,6 +662,7 @@ export interface GenerateFullRpsInput {
   prasyarat?: string
   jumlahCpmk?: number
   jumlahPertemuan?: number
+  useWebSearch?: boolean
 }
 
 export interface FullRpsCpmk {
@@ -734,6 +736,24 @@ export async function generateFullRps(
 
   report(5, 'Menganalisis informasi mata kuliah')
 
+  // ===== Optional: Web search for real-time context =====
+  let webContext = ''
+  if (input.useWebSearch) {
+    report(8, 'Mencari informasi terkini di internet...')
+    try {
+      const { searchMataKuliahContext } = await import('@/lib/web-search')
+      const ctx = await searchMataKuliahContext(input.namaMataKuliah, input.prodi)
+      if (ctx.summary) {
+        webContext = `\n\nINFORMASI HASIL PENCARIAN WEB (real-time, gunakan untuk akurasi):\n${ctx.summary}\n`
+      }
+      report(12, 'Info terkini ditemukan, mulai menyusun RPS...')
+    } catch (e) {
+      // Web search failed (network/quota) — continue without it
+      console.error('[AI] Web search failed, continuing without:', e instanceof Error ? e.message : e)
+      report(12, 'Web search gagal, lanjut tanpa info tambahan...')
+    }
+  }
+
   // ===== Step 1 prompt (deskripsi, CPL, penilaian) =====
   const step1Prompt = `Anda adalah pakar pendidikan tinggi Indonesia yang ahli menyusun RPS sesuai SN-Dikti/KKNI/MBKM.
 
@@ -759,6 +779,8 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
     { "nama": "Kehadiran", "bobot": 10, "bentuk": "Presensi", "keterangan": "..." }
   ]
 }`
+  // Append web search context to the prompt if available
+  const step1FullPrompt = webContext ? step1Prompt + webContext : step1Prompt
 
   // ===== Step 1: Deskripsi, CPL, Penilaian (sequential to avoid 429 rate limit) =====
   report(10, 'Menyusun deskripsi, CPL & komponen penilaian')
@@ -766,7 +788,7 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   const step1Raw = await createAndParseJson(
     [
       { role: 'assistant', content: 'Anda adalah pakar pendidikan tinggi Indonesia. Balas HANYA dengan JSON valid.' },
-      { role: 'user', content: step1Prompt },
+      { role: 'user', content: step1FullPrompt },
     ],
     'Deskripsi-CPL-Penilaian'
   )
@@ -804,6 +826,7 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
     namaMataKuliah: input.namaMataKuliah,
     deskripsi: input.deskripsiMataKuliah,
     prodi: input.prodi,
+    webContext: webContext || undefined,
   })
 
   report(95, 'Menyusun dokumen RPS final')

@@ -18,6 +18,7 @@ import {
   Save,
   RotateCcw,
   AlertCircle,
+  Globe,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -85,6 +86,7 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
   const [customProdi, setCustomProdi] = useState('Teknik Informatika')
   const [customSemester, setCustomSemester] = useState('3')
   const [customDeskripsi, setCustomDeskripsi] = useState('')
+  const [useWebSearch, setUseWebSearch] = useState(true)
 
   // Progress animation state
   const [progressIdx, setProgressIdx] = useState(0)
@@ -143,6 +145,7 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
         prasyarat: selectedMk.prasyarat || undefined,
         jumlahCpmk: Number(jumlahCpmk) || 4,
         jumlahPertemuan: 16,
+        useWebSearch,
       }
     } else {
       if (!customNama.trim() || !customDeskripsi.trim()) {
@@ -158,6 +161,7 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
         semester: Number(customSemester) || 3,
         jumlahCpmk: Number(jumlahCpmk) || 4,
         jumlahPertemuan: 16,
+        useWebSearch,
       }
     }
 
@@ -243,6 +247,7 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
     customProdi,
     customSemester,
     jumlahCpmk,
+    useWebSearch,
     stopPolling,
   ])
 
@@ -484,6 +489,37 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
                 <div className="grid gap-1.5 col-span-2">
                   <Label htmlFor="akelas">Kelas (opsional)</Label>
                   <Input id="akelas" value={kelas} onChange={(e) => setKelas(e.target.value)} placeholder="Contoh: TI-3A" />
+                </div>
+              </div>
+
+              {/* Web search toggle */}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={useWebSearch}
+                  onClick={() => setUseWebSearch((v) => !v)}
+                  className={`mt-0.5 relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors ${
+                    useWebSearch ? 'bg-blue-600' : 'bg-muted-foreground/30'
+                  }`}
+                >
+                  <span
+                    className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${
+                      useWebSearch ? 'translate-x-4' : 'translate-x-0.5'
+                    } translate-y-0.5`}
+                  />
+                </button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="size-3.5 text-blue-600" />
+                    <Label className="text-sm font-medium cursor-pointer" onClick={() => setUseWebSearch((v) => !v)}>
+                      Akses Internet untuk Info Terkini
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    AI akan mencari silabus, buku referensi, dan CPMK terbaru dari internet sebelum generate.
+                    Hasil lebih akurat tapi butuh ~5 detik tambahan.
+                  </p>
                 </div>
               </div>
 

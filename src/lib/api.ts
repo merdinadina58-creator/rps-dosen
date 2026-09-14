@@ -300,6 +300,7 @@ export const api = {
     prasyarat?: string
     jumlahCpmk?: number
     jumlahPertemuan?: number
+    useWebSearch?: boolean
   }) =>
     fetchJson<{ jobId: string; status: string }>('/api/ai/generate-full-rps', {
       method: 'POST',
