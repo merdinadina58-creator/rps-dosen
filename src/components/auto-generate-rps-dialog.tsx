@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -19,6 +19,7 @@ import {
   RotateCcw,
   AlertCircle,
   Globe,
+  Lightbulb,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -48,6 +49,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import { api, type FullRpsGenerated, type MataKuliah } from '@/lib/api'
+import { recommendCpmkCount } from '@/lib/cpmk-recommendation'
 
 interface AutoGenerateRpsDialogProps {
   open: boolean
@@ -110,6 +112,35 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
   })
 
   const selectedMk: MataKuliah | undefined = mataKuliahList.find((m) => m.id === mataKuliahId)
+
+  // ===== CPMK Recommendation (auto-calculated from mata kuliah characteristics) =====
+  const recommendation = useMemo(() => {
+    if (mode === 'existing' && selectedMk) {
+      return recommendCpmkCount({
+        sks: selectedMk.sks,
+        semester: selectedMk.semester,
+        prodi: selectedMk.prodi,
+        namaMataKuliah: selectedMk.nama,
+        deskripsi: selectedMk.deskripsi || '',
+      })
+    } else if (mode === 'custom' && customNama.trim()) {
+      return recommendCpmkCount({
+        sks: Number(customSks) || 3,
+        semester: Number(customSemester) || 3,
+        prodi: customProdi || 'Teknik Informatika',
+        namaMataKuliah: customNama,
+        deskripsi: customDeskripsi,
+      })
+    }
+    return null
+  }, [mode, selectedMk, customNama, customSks, customProdi, customSemester, customDeskripsi])
+
+  // Auto-set jumlahCpmk when recommendation changes
+  useEffect(() => {
+    if (recommendation) {
+      setJumlahCpmk(String(recommendation.count))
+    }
+  }, [recommendation])
 
   // Async generation: POST returns jobId immediately, then poll GET status.
   // This avoids 502 Bad Gateway from the proxy timing out on long requests.
@@ -465,8 +496,10 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {[3, 4, 5, 6].map((n) => (
-                        <SelectItem key={n} value={String(n)}>{n} CPMK</SelectItem>
+                      {[3, 4, 5, 6, 7, 8].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          {n} CPMK{recommendation && n === recommendation.count ? ' (rekomendasi)' : ''}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -491,6 +524,34 @@ export function AutoGenerateRpsDialog({ open, onOpenChange, onCreated }: AutoGen
                   <Input id="akelas" value={kelas} onChange={(e) => setKelas(e.target.value)} placeholder="Contoh: TI-3A" />
                 </div>
               </div>
+
+              {/* CPMK Recommendation info box */}
+              {recommendation && (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                  <div className="size-7 rounded-lg bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                    <Lightbulb className="size-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                      Rekomendasi: {recommendation.count} CPMK
+                      <button
+                        type="button"
+                        onClick={() => setJumlahCpmk(String(recommendation.count))}
+                        className="ml-2 text-xs underline hover:text-amber-600"
+                      >
+                        Terapkan
+                      </button>
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      {recommendation.factors.map((f, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Web search toggle */}
               <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">

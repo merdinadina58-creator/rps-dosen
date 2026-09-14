@@ -959,3 +959,37 @@ Stage Summary:
 - ✅ All existing data updated with OBE fields + CPL Prodi + Korelasi
 - ✅ Default universitas = "Universitas Nias Raya", kurikulum = "OBE"
 - ✅ Export uses exact template (clone-and-fill) with all OBE data
+
+---
+Task ID: CPMK-REC
+Agent: main (orchestrator)
+Task: Rekomendasi jumlah CPMK otomatis berdasarkan karakteristik mata kuliah
+
+Work Log:
+- Created src/lib/cpmk-recommendation.ts with recommendCpmkCount() function:
+  * Base formula: SKS -> CPMK (1-2 SKS=3, 3 SKS=4, 4 SKS=5, 5-6 SKS=6)
+  * Adjustment 1: Semester >= 5 -> +1 (advanced level)
+  * Adjustment 2: Prodi "Pendidikan/Keguruan" -> +1 (pedagogy aspect)
+  * Adjustment 3: Complex keywords in description (analisis, rancang, AI, ML, etc.) -> +1
+  * Adjustment 4: Description > 200 chars -> +1 (many topics)
+  * Clamp: min 3, max 8
+  * Returns { count, reason, factors[] }
+- Updated AutoGenerateRpsDialog:
+  * Added useMemo to compute recommendation from selected MK or custom input
+  * Added useEffect to auto-set jumlahCpmk to recommended value
+  * Dropdown now shows 3-8 CPMK with "(rekomendasi)" label on recommended count
+  * Info box (amber) shows recommended count + factor badges + "Terapkan" button
+  * User can override by selecting different value from dropdown
+
+Verification (Pemrograman Web, 4 SKS):
+- Base: 4 SKS -> 5 CPMK
+- Adjustment: Deskripsi > 200 chars -> +1 CPMK
+- Total: 6 CPMK (auto-set in dropdown)
+- Info box shows: "Rekomendasi: 6 CPMK" + factor badges
+- Lint: 0 errors
+
+Stage Summary:
+- ✅ CPMK recommendation works automatically when user selects mata kuliah
+- ✅ Based on SKS, semester, prodi, and topic complexity
+- ✅ Auto-sets dropdown to recommended value (user can override)
+- ✅ Shows explanation with contributing factors
