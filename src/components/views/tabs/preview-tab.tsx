@@ -2,18 +2,29 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { StatusBadge } from '@/components/status-badge'
+import { Download, FileDown, Loader2, CheckCircle2 } from 'lucide-react'
+import { validateRpsCompleteness } from '@/lib/rps-validation'
+import { exportUrl } from '@/lib/api'
 import type { RpsDetail } from '@/lib/api'
 
 interface Props {
   rps: RpsDetail
+  onExport?: (format: 'docx' | 'pdf') => void
+  exporting?: 'docx' | 'pdf' | null
 }
 
-export function PreviewTab({ rps }: Props) {
+export function PreviewTab({ rps, onExport, exporting }: Props) {
   const totalBobot = rps.penilaian.reduce((s, p) => s + p.bobot, 0)
   const bukuUtama = rps.referensi.filter((r) => r.isUtama)
   const bukuPendukung = rps.referensi.filter((r) => !r.isUtama)
+
+  // Check completeness for download readiness
+  const validation = validateRpsCompleteness(rps)
+  const errorCount = validation.issues.filter((i) => i.severity === 'error').length
+  const canDownload = validation.isValid
 
   return (
     <Card>
@@ -218,6 +229,78 @@ export function PreviewTab({ rps }: Props) {
               )}
             </div>
           </div>
+        </div>
+
+        <Separator />
+
+        {/* Download section — only available after reviewing preview */}
+        <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className={`size-10 rounded-lg flex items-center justify-center shrink-0 ${canDownload ? 'bg-emerald-500/20 text-emerald-600' : 'bg-amber-500/20 text-amber-600'}`}>
+                {canDownload ? <CheckCircle2 className="size-5" /> : <Loader2 className="size-5" />}
+              </div>
+              <div>
+                <p className="font-semibold text-sm">
+                  {canDownload ? 'RPS siap diunduh!' : 'RPS belum lengkap'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {canDownload
+                    ? 'Dokumen sudah ditinjau. Pilih format untuk mengunduh.'
+                    : `${errorCount} masalah harus diperbaiki sebelum download (lihat tab terkait)`}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onExport?.('docx')}
+                disabled={!canDownload || exporting !== null}
+                className="bg-background"
+              >
+                {exporting === 'docx' ? (
+                  <Loader2 className="size-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Download className="size-4 mr-1.5" />
+                )}
+                DOCX
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => onExport?.('pdf')}
+                disabled={!canDownload || exporting !== null}
+                className="bg-primary hover:bg-primary/90"
+              >
+                {exporting === 'pdf' ? (
+                  <Loader2 className="size-4 mr-1.5 animate-spin" />
+                ) : (
+                  <FileDown className="size-4 mr-1.5" />
+                )}
+                PDF
+              </Button>
+            </div>
+          </div>
+          {!canDownload && (
+            <div className="mt-3 pt-3 border-t border-amber-500/20">
+              <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                ⚠️ {errorCount} error mencegah download:
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {validation.issues.filter((i) => i.severity === 'error').slice(0, 3).map((issue, i) => (
+                  <li key={i} className="text-xs text-amber-600 dark:text-amber-400 flex items-start gap-1">
+                    <span className="shrink-0">•</span>
+                    <span>{issue.message}</span>
+                  </li>
+                ))}
+                {errorCount > 3 && (
+                  <li className="text-xs text-amber-600 dark:text-amber-400 italic">
+                    + {errorCount - 3} error lainnya...
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

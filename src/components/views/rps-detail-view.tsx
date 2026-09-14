@@ -89,6 +89,7 @@ export function RpsDetailView({ rpsId }: Props) {
   const [cloneOpen, setCloneOpen] = useState(false)
   const [exporting, setExporting] = useState<'docx' | 'pdf' | null>(null)
   const [finalValidation, setFinalValidation] = useState<ValidationResult | null>(null)
+  const [validationContext, setValidationContext] = useState<'final' | 'download' | null>(null)
 
   const { data: rps, isLoading, isError, error } = useQuery({
     queryKey: ['rps', rpsId],
@@ -128,6 +129,7 @@ export function RpsDetailView({ rpsId }: Props) {
       const validation = validateRpsCompleteness(rps)
       if (!validation.isValid) {
         // Show validation issues dialog — don't change status
+        setValidationContext('final')
         setFinalValidation(validation)
         return
       }
@@ -136,6 +138,23 @@ export function RpsDetailView({ rpsId }: Props) {
   }
 
   const handleExport = async (format: 'docx' | 'pdf') => {
+    // Require user to view Preview tab before downloading — prevents
+    // exporting unreviewed/incomplete documents.
+    if (tab !== 'preview') {
+      setTab('preview')
+      toast.info('📋 Tinjau preview dokumen dulu, lalu klik tombol Download di bawah preview')
+      return
+    }
+    // Also check completeness — block download if RPS has errors
+    if (rps) {
+      const validation = validateRpsCompleteness(rps)
+      if (!validation.isValid) {
+        setValidationContext('download')
+        setFinalValidation(validation) // reuse the same validation dialog
+        toast.warning('RPS belum lengkap — perbaiki dulu sebelum download')
+        return
+      }
+    }
     setExporting(format)
     try {
       const url = exportUrl(rpsId, format)
@@ -413,7 +432,11 @@ export function RpsDetailView({ rpsId }: Props) {
           <ReferensiTab rps={rps} />
         </TabsContent>
         <TabsContent value="preview" className="mt-4">
-          <PreviewTab rps={rps} />
+          <PreviewTab
+            rps={rps}
+            onExport={handleExport}
+            exporting={exporting}
+          />
         </TabsContent>
       </Tabs>
 
@@ -468,10 +491,11 @@ export function RpsDetailView({ rpsId }: Props) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="size-5 text-amber-500" />
-              RPS Belum Lengkap untuk Final
+              RPS Belum Lengkap
             </DialogTitle>
             <DialogDescription>
-              RPS ini belum memenuhi syarat untuk di-set ke status Final. Lengkapi komponen berikut:
+              RPS ini belum memenuhi syarat kelengkapan. Lengkapi komponen berikut sebelum
+              menetapkan status Final atau mengunduh dokumen:
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-64 pr-2">
@@ -512,17 +536,20 @@ export function RpsDetailView({ rpsId }: Props) {
               <Button variant="outline" onClick={() => setFinalValidation(null)}>
                 Lengkapi dulu
               </Button>
-              <Button
-                variant="outline"
-                className="text-amber-600 border-amber-400 hover:bg-amber-50"
-                onClick={() => {
-                  setFinalValidation(null)
-                  statusMut.mutate('final') // force set Final despite issues
-                  toast.warning('RPS di-set ke Final meski belum lengkap — silakan lengkapi segera')
-                }}
-              >
-                Tetap Set Final
-              </Button>
+              {/* Only show "force Final" button when triggered by status change, not download */}
+              {validationContext === 'final' && (
+                <Button
+                  variant="outline"
+                  className="text-amber-600 border-amber-400 hover:bg-amber-50"
+                  onClick={() => {
+                    setFinalValidation(null)
+                    statusMut.mutate('final') // force set Final despite issues
+                    toast.warning('RPS di-set ke Final meski belum lengkap — silakan lengkapi segera')
+                  }}
+                >
+                  Tetap Set Final
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>

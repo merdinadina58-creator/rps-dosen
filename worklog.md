@@ -620,3 +620,40 @@ Stage Summary:
 - ✅ Auto-navigates to cloned RPS for immediate editing
 - ✅ Summary panel shows exactly what will be copied
 - ✅ Saves 30-60 minutes of manual re-entry per semester
+
+---
+Task ID: 21
+Agent: main (orchestrator)
+Task: Wajib preview sebelum download DOCX/PDF + completeness gate
+
+Work Log:
+- User requested: "saat ingin download Docx atau Pdf, harus ada dulu preview"
+- Modified handleExport() in rps-detail-view.tsx:
+  * Check 1: if tab !== 'preview' → switch to Preview tab + toast "Tinjau preview dulu"
+  * Check 2: if RPS incomplete (validateRpsCompleteness fails) → show validation dialog + toast "belum lengkap"
+  * Only proceeds with download if: on Preview tab AND RPS is complete
+- Updated PreviewTab component to accept onExport + exporting props:
+  * Added Download section at the bottom of preview (bordered box, primary accent)
+  * Shows "RPS siap diunduh!" (green) if complete, "RPS belum lengkap" (amber) if not
+  * DOCX (outline) + PDF (primary) buttons — disabled if incomplete
+  * If incomplete: shows error list (max 3, with "+N error lainnya...")
+  * Uses validateRpsCompleteness() same as Final status validation
+- Updated validation dialog to be context-aware:
+  * Title changed from "RPS Belum Lengkap untuk Final" → generic "RPS Belum Lengkap"
+  * Description: "Lengkapi komponen berikut sebelum menetapkan status Final atau mengunduh dokumen"
+  * Added validationContext state: 'final' | 'download' | null
+  * "Tetap Set Final" button ONLY shows when context='final' (hidden for download — can't force download incomplete RPS)
+
+Verification:
+- Test 1: Click DOCX from tab Identitas → redirect to Preview + toast "📋 Tinjau preview dulu..." ✅
+- Test 2: Click PDF from Preview tab (incomplete RPS) → validation dialog "RPS Belum Lengkap" + toast "belum lengkap" ✅
+- Test 3: Dialog only shows "Lengkapi dulu" button (no "Tetap Set Final") when triggered by download ✅
+- Test 4: Preview tab download section shows "belum lengkap" with error list + disabled buttons ✅
+- Lint: 0 errors
+
+Stage Summary:
+- ✅ Download now requires Preview tab first (prevents exporting unreviewed docs)
+- ✅ Download also requires RPS completeness (can't download incomplete RPS)
+- ✅ Preview tab has dedicated download section with status indicator
+- ✅ Validation dialog is context-aware (force only for Final, not download)
+- ✅ Error list in both dialog AND preview section guides user to fix issues
