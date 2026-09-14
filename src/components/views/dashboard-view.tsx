@@ -138,39 +138,15 @@ export function DashboardView() {
         ))}
       </div>
 
-      {/* Hero banner - Generate AI */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 p-6 text-white shadow-lg"
-      >
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 20% 50%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-        <div className="relative flex flex-col md:flex-row md:items-center gap-4 justify-between">
-          <div className="flex items-start gap-4">
-            <div className="size-12 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
-              <Wand2 className="size-6" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold">Generate RPS Lengkap Otomatis dengan AI</h2>
-              <p className="text-sm text-white/90 mt-1 max-w-xl">
-                Pilih mata kuliah, lalu AI menyusun seluruh RPS untuk Anda — deskripsi, CPL, CPMK, Sub-CPMK, 16 pertemuan mingguan, komponen penilaian, hingga referensi. Selesai dalam sekali klik, bukan input manual.
-              </p>
-            </div>
-          </div>
-          <Button
-            size="lg"
-            onClick={() => setAutoGenOpen(true)}
-            className="bg-white text-emerald-700 hover:bg-white/90 shrink-0 font-semibold"
-          >
-            <Wand2 className="size-4 mr-2" /> Mulai Generate
-          </Button>
-        </div>
-      </motion.div>
-
       {/* Quick actions */}
       <div className="flex flex-wrap gap-3">
-        <Button onClick={() => setView('rps-list')} className="bg-primary hover:bg-primary/90">
+        <Button
+          onClick={() => setAutoGenOpen(true)}
+          className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white"
+        >
+          <Wand2 className="size-4 mr-2" /> Generate RPS dengan AI
+        </Button>
+        <Button variant="outline" onClick={() => setView('rps-list')}>
           <FileText className="size-4 mr-2" /> Lihat Daftar RPS
         </Button>
         <Button variant="outline" onClick={() => setView('ai-assistant')}>
