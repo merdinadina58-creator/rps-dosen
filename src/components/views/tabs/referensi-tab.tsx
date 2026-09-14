@@ -49,6 +49,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { api, type RpsDetail, type Referensi } from '@/lib/api'
+import { useAsyncAiJob } from '@/hooks/use-async-ai-job'
 
 interface Props {
   rps: RpsDetail
@@ -77,18 +78,18 @@ export function ReferensiTab({ rps }: Props) {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const aiGenerateMut = useMutation({
-    mutationFn: () =>
-      api.generateReferensi({
-        namaMataKuliah: rps.mataKuliah.nama,
-        deskripsi: rps.deskripsi || rps.mataKuliah.deskripsi || '',
-        prodi: rps.mataKuliah.prodi,
-      }),
+  const aiGen = useAsyncAiJob<{ referensi: GeneratedReferensi[] }>({
     onSuccess: (data) => {
       setAiResult(data.referensi)
       toast.success(`${data.referensi.length} referensi dibuat`)
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (msg) => toast.error(msg),
+  })
+
+  const buildReferensiInput = () => ({
+    namaMataKuliah: rps.mataKuliah.nama,
+    deskripsi: rps.deskripsi || rps.mataKuliah.deskripsi || '',
+    prodi: rps.mataKuliah.prodi,
   })
 
   const aiApplyMut = useMutation({
@@ -255,16 +256,16 @@ export function ReferensiTab({ rps }: Props) {
               <DialogFooter>
                 <Button variant="outline" onClick={() => setAiOpen(false)}>Batal</Button>
                 <Button
-                  onClick={() => aiGenerateMut.mutate()}
-                  disabled={aiGenerateMut.isPending}
+                  onClick={() => aiGen.mutate(() => api.generateReferensi(buildReferensiInput()))}
+                  disabled={aiGen.isPending}
                   className="bg-primary hover:bg-primary/90"
                 >
-                  {aiGenerateMut.isPending ? (
+                  {aiGen.isPending ? (
                     <Loader2 className="size-4 mr-2 animate-spin" />
                   ) : (
                     <Wand2 className="size-4 mr-2" />
                   )}
-                  Generate
+                  {aiGen.isPending ? `Generate... ${aiGen.progress}%` : 'Generate'}
                 </Button>
               </DialogFooter>
             </div>

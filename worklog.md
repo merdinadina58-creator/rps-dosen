@@ -300,3 +300,43 @@ Stage Summary:
 - ✅ Referensi fallback ensures RPS is always complete
 - ✅ Error messages now show WHICH step failed (e.g., "langkah: Referensi")
 - ✅ Verified with Bahasa Indonesia (the exact mata kuliah that failed in user's screenshot)
+
+---
+Task ID: 13
+Agent: main (orchestrator)
+Task: Fix per-tab Generate AI selalu gagal (502 timeout)
+
+Work Log:
+- User reported "kenapa saat generate AI selalu gagal"
+- Dev log showed: POST /api/ai/generate-pertemuan 200 in 42s — the OLD synchronous per-tab endpoints
+- Root cause: 3 per-tab "Generate AI" buttons (CPMK, Pertemuan, Referensi tabs) still used OLD synchronous endpoints
+  that take 30-42s → gateway/proxy times out at ~30s → browser sees error even though server returned 200
+- Fix: Convert all 3 per-tab endpoints to async job pattern (same as generate-full-rps):
+  1. Created generic status endpoint /api/ai/job/[jobId]/route.ts (shared by ALL AI jobs)
+  2. Rewrote generate-cpmk/route.ts: POST returns {jobId} immediately (202), runs generateCpmk() in background
+  3. Rewrote generate-pertemuan/route.ts: same async pattern with generatePertemuan() (splits into 2 calls internally)
+  4. Rewrote generate-referensi/route.ts: same async pattern with generateReferensi() (has fallback built-in)
+  5. Updated api.ts: all 3 generate functions now return {jobId}, added getAiJobStatus(jobId) generic poller
+  6. Created reusable hook src/hooks/use-async-ai-job.ts:
+     * Drop-in replacement for useMutation with async polling
+     * mutate(startFn) → get jobId → poll every 2.5s → onSuccess(data) / onError(msg)
+     * Auto-cleanup on unmount, 4min safety timeout
+     * Returns { mutate, isPending, progress, progressLabel, data, error, reset }
+  7. Updated 3 per-tab components (cpmk-tab, pertemuan-tab, referensi-tab):
+     * Replaced useMutation with useAsyncAiJob
+     * Button shows real progress % while generating ("Generate... 45%")
+     * Spinner + progress label from server
+
+Verification:
+- curl test: generate-pertemuan POST returns 0.09s (was 42s sync) → poll shows 10%→100% → done in 40s
+  with 16 pertemuan (Mgg1: HTML Dasar, Mgg8: UTS, Mgg16: UAS)
+- Browser test: RPS detail → CPMK tab → Generate AI → "Generate... 10%" button → 16s later
+  "4 CPMK berhasil dibuat, 12 Sub-CPMK" — no 502, no console errors
+
+Stage Summary:
+- ✅ All 3 per-tab Generate AI buttons now use async pattern (no more 502 timeout)
+- ✅ POST returns immediately (< 100ms) for ALL AI endpoints
+- ✅ Real progress % shown on button while generating
+- ✅ Reusable useAsyncAiJob hook (clean, DRY)
+- ✅ Generic /api/ai/job/[jobId] status endpoint shared by all AI jobs
+- ✅ No more "selalu gagal" — all Generate AI buttons work reliably

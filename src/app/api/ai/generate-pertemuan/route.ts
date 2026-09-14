@@ -1,9 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { generatePertemuan, type GeneratePertemuanInput } from '@/lib/ai'
+import { createJob, updateJob, generateJobId } from '@/lib/ai-job-store'
 
-export async function POST(req: NextRequest) {
+export const runtime = 'nodejs'
+export const maxDuration = 300
+
+/**
+ * ASYNC: POST returns jobId immediately. Client polls GET /api/ai/job/[jobId].
+ * Background: generatePertemuan runs (splits into 2 calls: weeks 1-8 and 9-16),
+ * updates job store with progress, stores result when done.
+ */
+export async function POST(request: Request) {
   try {
-    const body = (await req.json()) as Partial<GeneratePertemuanInput>
+    const body = (await request.json()) as Partial<GeneratePertemuanInput>
 
     const { namaMataKuliah, deskripsi, sks, cpmkList, subCpmkList, jumlahPertemuan } = body
 
@@ -14,20 +23,40 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const result = await generatePertemuan({
+    const input: GeneratePertemuanInput = {
       namaMataKuliah,
       deskripsi,
       sks: Number(sks),
       cpmkList,
       subCpmkList,
       jumlahPertemuan: jumlahPertemuan ? Number(jumlahPertemuan) : undefined,
-    })
+    }
 
-    return NextResponse.json(result)
+    const jobId = generateJobId()
+    createJob(jobId)
+    updateJob(jobId, { status: 'running', progress: 10, progressLabel: 'Menyusun rencana pertemuan minggu 1-8...' })
+
+    void generatePertemuan(input)
+      .then((result) => {
+        updateJob(jobId, {
+          status: 'done',
+          progress: 100,
+          progressLabel: 'Selesai',
+          result,
+        })
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : 'Gagal generate pertemuan'
+        updateJob(jobId, {
+          status: 'error',
+          error: message,
+          progressLabel: 'Gagal: ' + message,
+        })
+      })
+
+    return NextResponse.json({ jobId, status: 'pending' }, { status: 202 })
   } catch (error) {
-    console.error('POST /api/ai/generate-pertemuan error:', error)
-    const message =
-      error instanceof Error ? error.message : 'Gagal generate pertemuan'
+    const message = error instanceof Error ? error.message : 'Gagal memulai generate pertemuan'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

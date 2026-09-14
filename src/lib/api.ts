@@ -321,20 +321,29 @@ export const api = {
     semester: number
     jumlahCpmk?: number
   }) =>
-    fetchJson<{ cpmk: Array<{ kode: string; deskripsi: string; subCpmk: Array<{ kode: string; deskripsi: string }> }> }>(
-      '/api/ai/generate-cpmk',
-      { method: 'POST', body: JSON.stringify(data) }
-    ),
+    fetchJson<{ jobId: string; status: string }>('/api/ai/generate-cpmk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   generatePertemuan: (data: Record<string, unknown>) =>
-    fetchJson<{ pertemuan: Array<Record<string, unknown>> }>(
-      '/api/ai/generate-pertemuan',
-      { method: 'POST', body: JSON.stringify(data) }
-    ),
+    fetchJson<{ jobId: string; status: string }>('/api/ai/generate-pertemuan', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   generateReferensi: (data: { namaMataKuliah: string; deskripsi: string; prodi: string }) =>
-    fetchJson<{ referensi: Array<Record<string, unknown>> }>(
-      '/api/ai/generate-referensi',
-      { method: 'POST', body: JSON.stringify(data) }
-    ),
+    fetchJson<{ jobId: string; status: string }>('/api/ai/generate-referensi', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  // Generic AI job status poller (shared by all async AI endpoints)
+  getAiJobStatus: (jobId: string) =>
+    fetchJson<{
+      status: 'pending' | 'running' | 'done' | 'error'
+      progress: number
+      progressLabel: string
+      result?: unknown
+      error?: string
+    }>(`/api/ai/job/${jobId}`),
   askAssistant: (question: string, context?: string) =>
     fetchJson<{ answer: string }>('/api/ai/assistant', {
       method: 'POST',

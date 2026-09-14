@@ -41,6 +41,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { api, type RpsDetail, type Cpmk } from '@/lib/api'
+import { useAsyncAiJob } from '@/hooks/use-async-ai-job'
 
 interface Props {
   rps: RpsDetail
@@ -99,21 +100,12 @@ export function CpmkTab({ rps }: Props) {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const aiGenerateMut = useMutation({
-    mutationFn: () =>
-      api.generateCpmk({
-        namaMataKuliah: rps.mataKuliah.nama,
-        deskripsi: rps.deskripsi || rps.mataKuliah.deskripsi || '',
-        sks: rps.mataKuliah.sks,
-        prodi: rps.mataKuliah.prodi,
-        semester: rps.mataKuliah.semester,
-        jumlahCpmk: aiJumlah,
-      }),
+  const aiGen = useAsyncAiJob<{ cpmk: GeneratedCpmk[] }>({
     onSuccess: (data) => {
       setAiResult(data.cpmk)
       toast.success(`${data.cpmk.length} CPMK berhasil dibuat`)
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (msg) => toast.error(msg),
   })
 
   const aiApplyMut = useMutation({
@@ -435,16 +427,27 @@ export function CpmkTab({ rps }: Props) {
                   Batal
                 </Button>
                 <Button
-                  onClick={() => aiGenerateMut.mutate()}
-                  disabled={aiGenerateMut.isPending}
+                  onClick={() =>
+                    aiGen.mutate(() =>
+                      api.generateCpmk({
+                        namaMataKuliah: rps.mataKuliah.nama,
+                        deskripsi: rps.deskripsi || rps.mataKuliah.deskripsi || '',
+                        sks: rps.mataKuliah.sks,
+                        prodi: rps.mataKuliah.prodi,
+                        semester: rps.mataKuliah.semester,
+                        jumlahCpmk: aiJumlah,
+                      })
+                    )
+                  }
+                  disabled={aiGen.isPending}
                   className="bg-primary hover:bg-primary/90"
                 >
-                  {aiGenerateMut.isPending ? (
+                  {aiGen.isPending ? (
                     <Loader2 className="size-4 mr-2 animate-spin" />
                   ) : (
                     <Wand2 className="size-4 mr-2" />
                   )}
-                  Generate
+                  {aiGen.isPending ? `Generate... ${aiGen.progress}%` : 'Generate'}
                 </Button>
               </DialogFooter>
             </div>

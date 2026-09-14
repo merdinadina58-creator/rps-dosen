@@ -49,6 +49,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { api, type RpsDetail, type Pertemuan } from '@/lib/api'
+import { useAsyncAiJob } from '@/hooks/use-async-ai-job'
 
 interface Props {
   rps: RpsDetail
@@ -91,30 +92,31 @@ export function PertemuanTab({ rps }: Props) {
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const aiGenerateMut = useMutation({
-    mutationFn: () => {
-      const cpmkList = rps.cpmk.map((c) => ({ kode: c.kode, deskripsi: c.deskripsi }))
-      const subCpmkList = rps.cpmk.flatMap((c) =>
-        c.subCpmk.map((s) => ({ kode: s.kode, deskripsi: s.deskripsi, cpmkKode: c.kode }))
-      )
-      if (cpmkList.length === 0) {
-        throw new Error('Belum ada CPMK. Buat CPMK terlebih dahulu sebelum generate pertemuan.')
-      }
-      return api.generatePertemuan({
-        namaMataKuliah: rps.mataKuliah.nama,
-        deskripsi: rps.deskripsi || rps.mataKuliah.deskripsi || '',
-        sks: rps.mataKuliah.sks,
-        cpmkList,
-        subCpmkList,
-        jumlahPertemuan: rps.mingguPertemuan,
-      })
-    },
+  const aiGen = useAsyncAiJob<{ pertemuan: GeneratedPertemuan[] }>({
     onSuccess: (data) => {
-      setAiResult(data.pertemuan as GeneratedPertemuan[])
+      setAiResult(data.pertemuan)
       toast.success(`${data.pertemuan.length} pertemuan berhasil dibuat`)
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (msg) => toast.error(msg),
   })
+
+  const buildPertemuanInput = () => {
+    const cpmkList = rps.cpmk.map((c) => ({ kode: c.kode, deskripsi: c.deskripsi }))
+    const subCpmkList = rps.cpmk.flatMap((c) =>
+      c.subCpmk.map((s) => ({ kode: s.kode, deskripsi: s.deskripsi, cpmkKode: c.kode }))
+    )
+    if (cpmkList.length === 0) {
+      throw new Error('Belum ada CPMK. Buat CPMK terlebih dahulu sebelum generate pertemuan.')
+    }
+    return {
+      namaMataKuliah: rps.mataKuliah.nama,
+      deskripsi: rps.deskripsi || rps.mataKuliah.deskripsi || '',
+      sks: rps.mataKuliah.sks,
+      cpmkList,
+      subCpmkList,
+      jumlahPertemuan: rps.mingguPertemuan,
+    }
+  }
 
   const aiReplaceMut = useMutation({
     mutationFn: async () => {
@@ -349,16 +351,16 @@ export function PertemuanTab({ rps }: Props) {
                   Batal
                 </Button>
                 <Button
-                  onClick={() => aiGenerateMut.mutate()}
-                  disabled={aiGenerateMut.isPending || rps.cpmk.length === 0}
+                  onClick={() => aiGen.mutate(() => api.generatePertemuan(buildPertemuanInput()))}
+                  disabled={aiGen.isPending || rps.cpmk.length === 0}
                   className="bg-primary hover:bg-primary/90"
                 >
-                  {aiGenerateMut.isPending ? (
+                  {aiGen.isPending ? (
                     <Loader2 className="size-4 mr-2 animate-spin" />
                   ) : (
                     <Wand2 className="size-4 mr-2" />
                   )}
-                  Generate
+                  {aiGen.isPending ? `Generate... ${aiGen.progress}%` : 'Generate'}
                 </Button>
               </DialogFooter>
             </div>
