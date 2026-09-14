@@ -21,6 +21,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
       estimasiWaktu,
       urutan,
       subCpmkUtama,
+      kemampuanAkhir,
+      indikator,
+      teknikPenilaian,
+      kriteriaPenilaian,
+      tmDaring,
     } = body
 
     const existing = await db.pertemuan.findUnique({ where: { id } })
@@ -43,6 +48,11 @@ export async function PUT(req: NextRequest, { params }: Params) {
         estimasiWaktu: estimasiWaktu ?? null,
         urutan: urutan != null ? Number(urutan) : existing.urutan,
         subCpmkUtama: subCpmkUtama ?? null,
+        kemampuanAkhir: kemampuanAkhir ?? null,
+        indikator: indikator ?? null,
+        teknikPenilaian: teknikPenilaian ?? null,
+        kriteriaPenilaian: kriteriaPenilaian ?? null,
+        tmDaring: tmDaring ?? null,
       },
     })
     return NextResponse.json(pertemuan)

@@ -14,9 +14,20 @@ interface CreateFullRpsBody {
   judul: string
   kurikulum?: string
   status?: string
+  // Optional institusi/otorisasi (from manual input)
+  universitas?: string
+  fakultas?: string
+  kodeDokumen?: string
+  tglPenyusunan?: string
+  otorisasiDosenPengembang?: string
+  otorisasiKoordinatorRmk?: string
+  otorisasiKaprodi?: string
   // Konten hasil generate AI
   generated: GenerateFullRpsResult
 }
+
+const nullIfEmpty = (v: unknown): string | null =>
+  v == null || (typeof v === 'string' && v.trim() === '') ? null : String(v)
 
 export async function POST(request: Request) {
   try {
@@ -50,7 +61,7 @@ export async function POST(request: Request) {
 
     // Create RPS + all relations in a transaction
     const created = await db.$transaction(async (tx) => {
-      // 1. Create RPS
+      // 1. Create RPS with OBE fields
       const rps = await tx.rps.create({
         data: {
           judul: body.judul,
@@ -59,15 +70,50 @@ export async function POST(request: Request) {
           kelas: body.kelas ?? null,
           mataKuliahId: body.mataKuliahId,
           dosenId: body.dosenId,
-          deskripsi: body.generated.deskripsi || null,
-          cpl: body.generated.cpl || null,
+          deskripsi: nullIfEmpty(body.generated.deskripsi),
+          deskripsiSingkat: nullIfEmpty(body.generated.deskripsiSingkat),
+          bahanKajian: nullIfEmpty(body.generated.bahanKajian),
+          cpl: nullIfEmpty(body.generated.cpl),
+          mediaSoftware: nullIfEmpty(body.generated.mediaSoftware),
+          mediaHardware: nullIfEmpty(body.generated.mediaHardware),
+          teamTeaching: false,
+          universitas: nullIfEmpty(body.universitas),
+          fakultas: nullIfEmpty(body.fakultas),
+          kodeDokumen: nullIfEmpty(body.kodeDokumen),
+          tglPenyusunan:
+            body.tglPenyusunan != null && body.tglPenyusunan !== ''
+              ? new Date(body.tglPenyusunan)
+              : new Date(),
+          otorisasiDosenPengembang: nullIfEmpty(body.otorisasiDosenPengembang) ?? dosen.nama,
+          otorisasiKoordinatorRmk: nullIfEmpty(body.otorisasiKoordinatorRmk),
+          otorisasiKaprodi: nullIfEmpty(body.otorisasiKaprodi),
           mingguPertemuan: body.generated.pertemuan.length || 16,
           status: body.status || 'draft',
-          kurikulum: body.kurikulum || 'MBKM',
+          kurikulum: body.kurikulum || 'OBE',
         },
       })
 
-      // 2. Create CPMK + Sub-CPMK
+      // 2. Create CPMK + Sub-CPMK (track IDs for korelasi mapping)
+      const cplProdiIdMap = new Map<string, string>()
+      const subCpmkIdMap = new Map<string, string>()
+
+      // 2a. Create CPL Prodi records
+      if (body.generated.cplProdi && body.generated.cplProdi.length > 0) {
+        for (let i = 0; i < body.generated.cplProdi.length; i++) {
+          const cpl = body.generated.cplProdi[i]
+          const createdCpl = await tx.cplProdi.create({
+            data: {
+              rpsId: rps.id,
+              kode: cpl.kode,
+              deskripsi: cpl.deskripsi,
+              urutan: i + 1,
+            },
+          })
+          cplProdiIdMap.set(cpl.kode, createdCpl.id)
+        }
+      }
+
+      // 2b. Create CPMK + Sub-CPMK
       for (let i = 0; i < body.generated.cpmk.length; i++) {
         const c = body.generated.cpmk[i]
         const cpmk = await tx.cpmk.create({
@@ -79,18 +125,42 @@ export async function POST(request: Request) {
           },
         })
         if (c.subCpmk && c.subCpmk.length > 0) {
-          await tx.subCpmk.createMany({
-            data: c.subCpmk.map((s, j) => ({
-              cpmkId: cpmk.id,
-              kode: s.kode,
-              deskripsi: s.deskripsi,
-              urutan: j + 1,
-            })),
+          for (let j = 0; j < c.subCpmk.length; j++) {
+            const s = c.subCpmk[j]
+            const sub = await tx.subCpmk.create({
+              data: {
+                cpmkId: cpmk.id,
+                kode: s.kode,
+                deskripsi: s.deskripsi,
+                urutan: j + 1,
+              },
+            })
+            subCpmkIdMap.set(s.kode, sub.id)
+          }
+        }
+      }
+
+      // 2c. Create Korelasi CPL -> Sub-CPMK
+      if (body.generated.korelasi && body.generated.korelasi.length > 0) {
+        for (let i = 0; i < body.generated.korelasi.length; i++) {
+          const k = body.generated.korelasi[i]
+          const cplProdiId = cplProdiIdMap.get(k.cplKode) ?? null
+          const subCpmkId = subCpmkIdMap.get(k.subCpmkKode) ?? null
+          await tx.korelasiCplSubCpmk.create({
+            data: {
+              rpsId: rps.id,
+              cplProdiId,
+              subCpmkId,
+              subCpmkKode: k.subCpmkKode,
+              bobot: k.bobot,
+              jumlahMinggu: Number(k.jumlahMinggu) || 0,
+              urutan: i + 1,
+            },
           })
         }
       }
 
-      // 3. Create Pertemuan
+      // 3. Create Pertemuan with OBE fields
       if (body.generated.pertemuan.length > 0) {
         const sortedP = [...body.generated.pertemuan].sort((a, b) => a.mingguKe - b.mingguKe)
         for (let i = 0; i < sortedP.length; i++) {
@@ -99,14 +169,20 @@ export async function POST(request: Request) {
             data: {
               rpsId: rps.id,
               mingguKe: p.mingguKe,
-              materi: p.materi || null,
-              metode: p.metode || null,
-              aktivitasDosen: p.aktivitasDosen || null,
-              aktivitasMhs: p.aktivitasMhs || null,
-              pengalamanBelajar: p.pengalamanBelajar || null,
-              indikatorPenilaian: p.indikatorPenilaian || null,
+              subCpmkUtama: nullIfEmpty(p.subCpmkKode),
+              kemampuanAkhir: nullIfEmpty(p.kemampuanAkhir),
+              indikator: nullIfEmpty(p.indikator),
+              teknikPenilaian: nullIfEmpty(p.teknikPenilaian),
+              kriteriaPenilaian: nullIfEmpty(p.kriteriaPenilaian),
+              tmDaring: nullIfEmpty(p.tmDaring),
+              materi: nullIfEmpty(p.materi),
+              metode: nullIfEmpty(p.metode),
+              aktivitasDosen: nullIfEmpty(p.aktivitasDosen),
+              aktivitasMhs: nullIfEmpty(p.aktivitasMhs),
+              pengalamanBelajar: nullIfEmpty(p.pengalamanBelajar),
+              indikatorPenilaian: nullIfEmpty(p.indikatorPenilaian),
               bobotPenilaian: Number(p.bobotPenilaian) || 0,
-              estimasiWaktu: p.estimasiWaktu || '150 menit',
+              estimasiWaktu: nullIfEmpty(p.estimasiWaktu) ?? '150 menit',
               urutan: i + 1,
             },
           })
@@ -122,8 +198,8 @@ export async function POST(request: Request) {
               rpsId: rps.id,
               nama: p.nama,
               bobot: Number(p.bobot) || 0,
-              bentuk: p.bentuk || null,
-              keterangan: p.keterangan || null,
+              bentuk: nullIfEmpty(p.bentuk),
+              keterangan: nullIfEmpty(p.keterangan),
               urutan: i + 1,
             },
           })
@@ -143,10 +219,10 @@ export async function POST(request: Request) {
               rpsId: rps.id,
               jenis: r.jenis || 'buku',
               judul: r.judul,
-              pengarang: r.pengarang || null,
-              penerbit: r.penerbit || null,
-              tahun: r.tahun || null,
-              url: r.url || null,
+              pengarang: nullIfEmpty(r.pengarang),
+              penerbit: nullIfEmpty(r.penerbit),
+              tahun: nullIfEmpty(r.tahun),
+              url: nullIfEmpty(r.url),
               isUtama: !!r.isUtama,
               urutan: i + 1,
             },

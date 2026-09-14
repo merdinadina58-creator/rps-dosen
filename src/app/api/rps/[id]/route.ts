@@ -28,6 +28,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
         },
         referensi: { orderBy: { urutan: 'asc' } },
         penilaian: { orderBy: { urutan: 'asc' } },
+        cplProdi: { orderBy: { urutan: 'asc' } },
+        korelasi: {
+          orderBy: { urutan: 'asc' },
+          include: { cplProdi: true },
+        },
       },
     })
 
@@ -52,7 +57,20 @@ export async function PUT(req: NextRequest, { params }: Params) {
       semester,
       kelas,
       deskripsi,
+      deskripsiSingkat,
+      bahanKajian,
       cpl,
+      mediaSoftware,
+      mediaHardware,
+      teamTeaching,
+      mataKuliahSyarat,
+      universitas,
+      fakultas,
+      kodeDokumen,
+      tglPenyusunan,
+      otorisasiDosenPengembang,
+      otorisasiKoordinatorRmk,
+      otorisasiKaprodi,
       mingguPertemuan,
       status,
       kurikulum,
@@ -65,15 +83,36 @@ export async function PUT(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'RPS tidak ditemukan' }, { status: 404 })
     }
 
+    // Helper: convert empty string -> null
+    const nullIfEmpty = (v: unknown): string | null =>
+      v == null || (typeof v === 'string' && v.trim() === '') ? null : String(v)
+
     const rps = await db.rps.update({
       where: { id },
       data: {
         judul: judul ?? existing.judul,
         tahunAjaran: tahunAjaran ?? existing.tahunAjaran,
         semester: semester ?? existing.semester,
-        kelas: kelas ?? null,
-        deskripsi: deskripsi ?? null,
-        cpl: cpl ?? null,
+        kelas: nullIfEmpty(kelas),
+        deskripsi: nullIfEmpty(deskripsi),
+        deskripsiSingkat: nullIfEmpty(deskripsiSingkat),
+        bahanKajian: nullIfEmpty(bahanKajian),
+        cpl: nullIfEmpty(cpl),
+        mediaSoftware: nullIfEmpty(mediaSoftware),
+        mediaHardware: nullIfEmpty(mediaHardware),
+        teamTeaching:
+          teamTeaching != null ? Boolean(teamTeaching) : existing.teamTeaching,
+        mataKuliahSyarat: nullIfEmpty(mataKuliahSyarat),
+        universitas: nullIfEmpty(universitas),
+        fakultas: nullIfEmpty(fakultas),
+        kodeDokumen: nullIfEmpty(kodeDokumen),
+        tglPenyusunan:
+          tglPenyusunan != null && tglPenyusunan !== ''
+            ? new Date(tglPenyusunan)
+            : null,
+        otorisasiDosenPengembang: nullIfEmpty(otorisasiDosenPengembang),
+        otorisasiKoordinatorRmk: nullIfEmpty(otorisasiKoordinatorRmk),
+        otorisasiKaprodi: nullIfEmpty(otorisasiKaprodi),
         mingguPertemuan:
           mingguPertemuan != null ? Number(mingguPertemuan) : existing.mingguPertemuan,
         status: status ?? existing.status,

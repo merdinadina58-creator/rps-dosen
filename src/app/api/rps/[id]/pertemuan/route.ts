@@ -39,6 +39,11 @@ export async function POST(req: NextRequest, { params }: Params) {
       estimasiWaktu,
       urutan,
       subCpmkUtama,
+      kemampuanAkhir,
+      indikator,
+      teknikPenilaian,
+      kriteriaPenilaian,
+      tmDaring,
     } = body
 
     if (mingguKe == null) {
@@ -72,6 +77,11 @@ export async function POST(req: NextRequest, { params }: Params) {
         bobotPenilaian: bobotPenilaian != null ? Number(bobotPenilaian) : 0,
         estimasiWaktu: estimasiWaktu || null,
         subCpmkUtama: subCpmkUtama || null,
+        kemampuanAkhir: kemampuanAkhir || null,
+        indikator: indikator || null,
+        teknikPenilaian: teknikPenilaian || null,
+        kriteriaPenilaian: kriteriaPenilaian || null,
+        tmDaring: tmDaring || null,
         urutan: Number(nextUrutan),
       },
     })

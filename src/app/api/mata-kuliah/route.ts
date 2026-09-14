@@ -26,7 +26,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { kode, nama, sks, semester, prodi, deskripsi, prasyarat } = body
+    const {
+      kode,
+      nama,
+      sks,
+      sksTeori,
+      sksPraktek,
+      rumpunMk,
+      semester,
+      prodi,
+      deskripsi,
+      prasyarat,
+    } = body
 
     if (!kode || !nama || !prodi || sks == null || semester == null) {
       return NextResponse.json(
@@ -40,6 +51,9 @@ export async function POST(req: NextRequest) {
         kode,
         nama,
         sks: Number(sks),
+        sksTeori: sksTeori != null ? Number(sksTeori) : 0,
+        sksPraktek: sksPraktek != null ? Number(sksPraktek) : 0,
+        rumpunMk: rumpunMk || null,
         semester: Number(semester),
         prodi,
         deskripsi: deskripsi || null,

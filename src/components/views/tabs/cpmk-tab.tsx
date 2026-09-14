@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   Plus,
@@ -40,7 +40,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { api, type RpsDetail, type Cpmk } from '@/lib/api'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  api,
+  type RpsDetail,
+  type Cpmk,
+  type CplProdi,
+  type KorelasiCplSubCpmk,
+} from '@/lib/api'
 import { useAsyncAiJob } from '@/hooks/use-async-ai-job'
 
 interface Props {
@@ -64,11 +85,36 @@ export function CpmkTab({ rps }: Props) {
   const [deleteCpmk, setDeleteCpmk] = useState<Cpmk | null>(null)
   const [deleteSubCpmk, setDeleteSubCpmk] = useState<{ cpmkId: string; subCpmk: Cpmk['subCpmk'][number] } | null>(null)
 
+  // CPL Prodi state
+  const [editingCpl, setEditingCpl] = useState<CplProdi | null>(null)
+  const [addCplOpen, setAddCplOpen] = useState(false)
+  const [deleteCpl, setDeleteCpl] = useState<CplProdi | null>(null)
+
+  // Korelasi state
+  const [editingKor, setEditingKor] = useState<KorelasiCplSubCpmk | null>(null)
+  const [addKorOpen, setAddKorOpen] = useState(false)
+  const [deleteKor, setDeleteKorelasi] = useState<KorelasiCplSubCpmk | null>(null)
+
   // AI generate state
   const [aiOpen, setAiOpen] = useState(false)
   const [aiJumlah, setAiJumlah] = useState(4)
   const [aiResult, setAiResult] = useState<GeneratedCpmk[] | null>(null)
   const [aiApplyConfirm, setAiApplyConfirm] = useState(false)
+
+  const cplProdiQuery = useQuery({
+    queryKey: ['cpl-prodi', rps.id],
+    queryFn: () => api.listCplProdi(rps.id),
+    initialData: rps.cplProdi ?? [],
+  })
+
+  const korelasiQuery = useQuery({
+    queryKey: ['korelasi', rps.id],
+    queryFn: () => api.listKorelasi(rps.id),
+    initialData: rps.korelasi ?? [],
+  })
+
+  const cplProdiList = cplProdiQuery.data ?? []
+  const korelasiList = korelasiQuery.data ?? []
 
   const toggleCollapse = (id: string) => {
     setCollapsed((prev) => {
@@ -79,7 +125,7 @@ export function CpmkTab({ rps }: Props) {
     })
   }
 
-  // Mutations
+  // ===== Mutations =====
   const deleteCpmkMut = useMutation({
     mutationFn: (id: string) => api.deleteCpmk(rps.id, id),
     onSuccess: () => {
@@ -100,6 +146,31 @@ export function CpmkTab({ rps }: Props) {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // CPL Prodi mutations
+  const deleteCplMut = useMutation({
+    mutationFn: (id: string) => api.deleteCplProdi(rps.id, id),
+    onSuccess: () => {
+      toast.success('CPL Prodi dihapus')
+      queryClient.invalidateQueries({ queryKey: ['cpl-prodi', rps.id] })
+      queryClient.invalidateQueries({ queryKey: ['korelasi', rps.id] })
+      queryClient.invalidateQueries({ queryKey: ['rps', rps.id] })
+      setDeleteCpl(null)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  // Korelasi mutations
+  const deleteKorMut = useMutation({
+    mutationFn: (id: string) => api.deleteKorelasi(rps.id, id),
+    onSuccess: () => {
+      toast.success('Korelasi dihapus')
+      queryClient.invalidateQueries({ queryKey: ['korelasi', rps.id] })
+      queryClient.invalidateQueries({ queryKey: ['rps', rps.id] })
+      setDeleteKorelasi(null)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
   const aiGen = useAsyncAiJob<{ cpmk: GeneratedCpmk[] }>({
     onSuccess: (data) => {
       setAiResult(data.cpmk)
@@ -111,8 +182,6 @@ export function CpmkTab({ rps }: Props) {
   const aiApplyMut = useMutation({
     mutationFn: async () => {
       if (!aiResult) return
-      // Optionally clear existing CPMK? We'll add new ones to keep safe — but prompt asked for "may overwrite"
-      // We append with shifted urutan
       const existingCount = rps.cpmk.length
       for (let i = 0; i < aiResult.length; i++) {
         const c = aiResult[i]
@@ -140,7 +209,6 @@ export function CpmkTab({ rps }: Props) {
   const aiReplaceMut = useMutation({
     mutationFn: async () => {
       if (!aiResult) return
-      // Delete all existing CPMK then add new
       for (const c of rps.cpmk) {
         await api.deleteCpmk(rps.id, c.id)
       }
@@ -167,8 +235,167 @@ export function CpmkTab({ rps }: Props) {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // Flatten Sub-CPMK for korelasi dropdown
+  const allSubCpmk = rps.cpmk.flatMap((c) => c.subCpmk)
+
   return (
     <div className="space-y-4">
+      {/* ===== CPL Prodi ===== */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-base">Capaian Pembelajaran Lulusan (CPL) Prodi</CardTitle>
+            <CardDescription>{cplProdiList.length} CPL Prodi</CardDescription>
+          </div>
+          <Button onClick={() => setAddCplOpen(true)} className="bg-primary hover:bg-primary/90 shrink-0">
+            <Plus className="size-4 mr-2" /> Tambah CPL
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {cplProdiList.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Plus className="size-8 mx-auto mb-2 opacity-40" />
+              Belum ada CPL Prodi. Tambahkan untuk OBE terstruktur.
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {cplProdiList.map((cpl) => (
+                <li
+                  key={cpl.id}
+                  className="flex items-start gap-3 rounded-lg border p-3"
+                >
+                  <Badge variant="secondary" className="font-mono shrink-0">
+                    {cpl.kode}
+                  </Badge>
+                  <p className="text-sm flex-1">{cpl.deskripsi}</p>
+                  <div className="flex gap-1 shrink-0">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-7"
+                      onClick={() => setEditingCpl(cpl)}
+                      aria-label="Edit CPL"
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-7 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteCpl(cpl)}
+                      aria-label="Hapus CPL"
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ===== Korelasi CPL -> Sub-CPMK ===== */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-base">
+              Korelasi CPL terhadap Sub-CPMK
+            </CardTitle>
+            <CardDescription>
+              {korelasiList.length} korelasi · matriks bobot CPL per Sub-CPMK
+            </CardDescription>
+          </div>
+          <Button
+            onClick={() => setAddKorOpen(true)}
+            className="bg-primary hover:bg-primary/90 shrink-0"
+            disabled={cplProdiList.length === 0 || allSubCpmk.length === 0}
+          >
+            <Plus className="size-4 mr-2" /> Tambah Korelasi
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {cplProdiList.length === 0 || allSubCpmk.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <p>
+                Butuh minimal 1 CPL Prodi dan 1 Sub-CPMK untuk membuat korelasi.
+              </p>
+            </div>
+          ) : korelasiList.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <Plus className="size-8 mx-auto mb-2 opacity-40" />
+              Belum ada korelasi. Tambahkan untuk memetakan CPL ke Sub-CPMK.
+            </div>
+          ) : (
+            <div className="rounded-lg border overflow-hidden">
+              <div className="max-h-96 overflow-auto scrollbar-thin">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-muted z-10">
+                    <TableRow>
+                      <TableHead className="min-w-32">Sub-CPMK</TableHead>
+                      <TableHead className="min-w-28">CPL</TableHead>
+                      <TableHead className="w-24">Bobot</TableHead>
+                      <TableHead className="w-28">Jumlah Mgg</TableHead>
+                      <TableHead className="w-20 text-right">Aksi</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {korelasiList.map((k) => {
+                      const cpl = k.cplProdi
+                      return (
+                        <TableRow key={k.id}>
+                          <TableCell className="font-mono text-xs">
+                            {k.subCpmkKode || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {cpl ? (
+                              <Badge variant="secondary" className="font-mono text-xs">
+                                {cpl.kode}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center font-mono">
+                            {k.bobot || '-'}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {k.jumlahMinggu}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7"
+                                onClick={() => setEditingKor(k)}
+                                aria-label="Edit Korelasi"
+                              >
+                                <Pencil className="size-3" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7 text-destructive hover:text-destructive"
+                                onClick={() => setDeleteKorelasi(k)}
+                                aria-label="Hapus Korelasi"
+                              >
+                                <Trash2 className="size-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ===== CPMK ===== */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
@@ -334,6 +561,34 @@ export function CpmkTab({ rps }: Props) {
         subCpmk={editingSubCpmk?.subCpmk ?? null}
       />
 
+      {/* Add / Edit CPL Prodi */}
+      <CplProdiFormDialog
+        open={!!editingCpl || addCplOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditingCpl(null)
+            setAddCplOpen(false)
+          }
+        }}
+        rpsId={rps.id}
+        cpl={editingCpl}
+      />
+
+      {/* Add / Edit Korelasi */}
+      <KorelasiFormDialog
+        open={!!editingKor || addKorOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditingKor(null)
+            setAddKorOpen(false)
+          }
+        }}
+        rpsId={rps.id}
+        korelasi={editingKor}
+        cplProdiList={cplProdiList}
+        subCpmkList={allSubCpmk}
+      />
+
       {/* Delete CPMK */}
       <AlertDialog open={!!deleteCpmk} onOpenChange={(o) => !o && setDeleteCpmk(null)}>
         <AlertDialogContent>
@@ -375,6 +630,53 @@ export function CpmkTab({ rps }: Props) {
                 deleteSubCpmk && deleteSubMut.mutate(deleteSubCpmk.subCpmk.id)
               }
               disabled={deleteSubMut.isPending}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete CPL Prodi */}
+      <AlertDialog open={!!deleteCpl} onOpenChange={(o) => !o && setDeleteCpl(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus CPL Prodi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus <strong>{deleteCpl?.kode}</strong>? Korelasi yang memakai CPL ini akan
+              kehilangan referensi (tetap ada, CPL = -).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90 text-white"
+              onClick={() => deleteCpl && deleteCplMut.mutate(deleteCpl.id)}
+              disabled={deleteCplMut.isPending}
+            >
+              Hapus
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Korelasi */}
+      <AlertDialog open={!!deleteKor} onOpenChange={(o) => !o && setDeleteKorelasi(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hapus Korelasi?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Hapus korelasi{' '}
+              <strong>{deleteKor?.subCpmkKode || '-'}</strong>? Tindakan ini tidak dapat
+              dibatalkan.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90 text-white"
+              onClick={() => deleteKor && deleteKorMut.mutate(deleteKor.id)}
+              disabled={deleteKorMut.isPending}
             >
               Hapus
             </AlertDialogAction>
@@ -763,6 +1065,269 @@ function SubCpmkFormDialogInner({
             Batal
           </Button>
           <Button onClick={() => mut.mutate()} disabled={mut.isPending || !kode || !deskripsi}>
+            {mut.isPending ? 'Menyimpan...' : 'Simpan'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ===== CPL Prodi Form Dialog =====
+function CplProdiFormDialog({
+  open,
+  onOpenChange,
+  rpsId,
+  cpl,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  rpsId: string
+  cpl: CplProdi | null
+}) {
+  const isEdit = !!cpl
+  return (
+    <CplProdiFormDialogInner
+      key={cpl?.id ?? 'new'}
+      open={open}
+      onOpenChange={onOpenChange}
+      rpsId={rpsId}
+      isEdit={isEdit}
+      cplId={cpl?.id ?? ''}
+      initialKode={cpl?.kode ?? ''}
+      initialDeskripsi={cpl?.deskripsi ?? ''}
+    />
+  )
+}
+
+function CplProdiFormDialogInner({
+  open,
+  onOpenChange,
+  rpsId,
+  isEdit,
+  cplId,
+  initialKode,
+  initialDeskripsi,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  rpsId: string
+  isEdit: boolean
+  cplId: string
+  initialKode: string
+  initialDeskripsi: string
+}) {
+  const queryClient = useQueryClient()
+  const [kode, setKode] = useState(initialKode)
+  const [deskripsi, setDeskripsi] = useState(initialDeskripsi)
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (isEdit && cplId) {
+        return api.updateCplProdi(rpsId, cplId, { kode, deskripsi })
+      }
+      return api.createCplProdi(rpsId, { kode, deskripsi })
+    },
+    onSuccess: () => {
+      toast.success(isEdit ? 'CPL Prodi diperbarui' : 'CPL Prodi dibuat')
+      queryClient.invalidateQueries({ queryKey: ['cpl-prodi', rpsId] })
+      queryClient.invalidateQueries({ queryKey: ['rps', rpsId] })
+      onOpenChange(false)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edit CPL Prodi' : 'Tambah CPL Prodi'}</DialogTitle>
+          <DialogDescription>
+            Capaian Pembelajaran Lulusan (CPL) Prodi yang dibebankan ke mata kuliah ini.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="grid gap-2">
+            <Label htmlFor="cplkode">Kode CPL</Label>
+            <Input
+              id="cplkode"
+              placeholder="CPL1"
+              value={kode}
+              onChange={(e) => setKode(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="cpldesk">Deskripsi CPL</Label>
+            <Textarea
+              id="cpldesk"
+              rows={4}
+              placeholder="Capaian pembelajaran lulusan prodi..."
+              value={deskripsi}
+              onChange={(e) => setDeskripsi(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Batal
+          </Button>
+          <Button onClick={() => mut.mutate()} disabled={mut.isPending || !kode || !deskripsi}>
+            {mut.isPending ? 'Menyimpan...' : 'Simpan'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ===== Korelasi Form Dialog =====
+function KorelasiFormDialog({
+  open,
+  onOpenChange,
+  rpsId,
+  korelasi,
+  cplProdiList,
+  subCpmkList,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  rpsId: string
+  korelasi: KorelasiCplSubCpmk | null
+  cplProdiList: CplProdi[]
+  subCpmkList: Array<{ id: string; kode: string; deskripsi: string }>
+}) {
+  const isEdit = !!korelasi
+  return (
+    <KorelasiFormDialogInner
+      key={korelasi?.id ?? 'new'}
+      open={open}
+      onOpenChange={onOpenChange}
+      rpsId={rpsId}
+      isEdit={isEdit}
+      korelasi={korelasi}
+      cplProdiList={cplProdiList}
+      subCpmkList={subCpmkList}
+    />
+  )
+}
+
+function KorelasiFormDialogInner({
+  open,
+  onOpenChange,
+  rpsId,
+  isEdit,
+  korelasi,
+  cplProdiList,
+  subCpmkList,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  rpsId: string
+  isEdit: boolean
+  korelasi: KorelasiCplSubCpmk | null
+  cplProdiList: CplProdi[]
+  subCpmkList: Array<{ id: string; kode: string; deskripsi: string }>
+}) {
+  const queryClient = useQueryClient()
+  const [cplProdiId, setCplProdiId] = useState<string>(korelasi?.cplProdiId ?? '')
+  const [subCpmkKode, setSubCpmkKode] = useState<string>(korelasi?.subCpmkKode ?? '')
+  const [bobot, setBobot] = useState<string>(korelasi?.bobot ?? '')
+  const [jumlahMinggu, setJumlahMinggu] = useState<number>(
+    korelasi?.jumlahMinggu ?? 1
+  )
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        cplProdiId: cplProdiId || null,
+        subCpmkKode,
+        bobot: bobot || null,
+        jumlahMinggu: Number(jumlahMinggu) || 0,
+      }
+      if (isEdit && korelasi) {
+        return api.updateKorelasi(rpsId, korelasi.id, payload)
+      }
+      return api.createKorelasi(rpsId, payload)
+    },
+    onSuccess: () => {
+      toast.success(isEdit ? 'Korelasi diperbarui' : 'Korelasi dibuat')
+      queryClient.invalidateQueries({ queryKey: ['korelasi', rpsId] })
+      queryClient.invalidateQueries({ queryKey: ['rps', rpsId] })
+      onOpenChange(false)
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Edit Korelasi' : 'Tambah Korelasi'}</DialogTitle>
+          <DialogDescription>
+            Pemetaan bobot CPL terhadap Sub-CPMK tertentu.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="grid gap-2">
+            <Label htmlFor="korsub">Sub-CPMK</Label>
+            <Select value={subCpmkKode} onValueChange={setSubCpmkKode}>
+              <SelectTrigger id="korsub">
+                <SelectValue placeholder="Pilih Sub-CPMK" />
+              </SelectTrigger>
+              <SelectContent>
+                {subCpmkList.map((s) => (
+                  <SelectItem key={s.id} value={s.kode}>
+                    {s.kode}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="korcpl">CPL Prodi</Label>
+            <Select value={cplProdiId} onValueChange={setCplProdiId}>
+              <SelectTrigger id="korcpl">
+                <SelectValue placeholder="Pilih CPL Prodi" />
+              </SelectTrigger>
+              <SelectContent>
+                {cplProdiList.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.kode}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="korbobot">Bobot (%)</Label>
+              <Input
+                id="korbobot"
+                placeholder="e.g. 1%, 0.5%"
+                value={bobot}
+                onChange={(e) => setBobot(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="kormgg">Jumlah Minggu</Label>
+              <Input
+                id="kormgg"
+                type="number"
+                min={0}
+                value={jumlahMinggu}
+                onChange={(e) => setJumlahMinggu(Number(e.target.value) || 0)}
+              />
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Batal
+          </Button>
+          <Button
+            onClick={() => mut.mutate()}
+            disabled={mut.isPending || !subCpmkKode || !cplProdiId}
+          >
             {mut.isPending ? 'Menyimpan...' : 'Simpan'}
           </Button>
         </DialogFooter>

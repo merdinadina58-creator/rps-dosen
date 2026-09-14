@@ -41,6 +41,13 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -66,6 +73,12 @@ interface GeneratedPertemuan {
   bobotPenilaian: number
   estimasiWaktu: string
   subCpmkTerkait: string[]
+  subCpmkKode?: string
+  kemampuanAkhir?: string
+  indikator?: string
+  teknikPenilaian?: string
+  kriteriaPenilaian?: string
+  tmDaring?: string
 }
 
 export function PertemuanTab({ rps }: Props) {
@@ -137,6 +150,12 @@ export function PertemuanTab({ rps }: Props) {
           bobotPenilaian: p.bobotPenilaian,
           estimasiWaktu: p.estimasiWaktu,
           urutan: i + 1,
+          subCpmkUtama: p.subCpmkKode || p.subCpmkTerkait?.[0] || null,
+          kemampuanAkhir: p.kemampuanAkhir || null,
+          indikator: p.indikator || null,
+          teknikPenilaian: p.teknikPenilaian || null,
+          kriteriaPenilaian: p.kriteriaPenilaian || null,
+          tmDaring: p.tmDaring || null,
         })
       }
     },
@@ -150,12 +169,15 @@ export function PertemuanTab({ rps }: Props) {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  // All Sub-CPMK for the dropdown in the form
+  const allSubCpmk = rps.cpmk.flatMap((c) => c.subCpmk)
+
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <div>
-            <CardTitle className="text-base">Rencana Pembelajaran Mingguan</CardTitle>
+            <CardTitle className="text-base">Rencana Pembelajaran Mingguan (OBE)</CardTitle>
             <CardDescription>
               {rps.pertemuan.length} dari {rps.mingguPertemuan} pertemuan
             </CardDescription>
@@ -202,16 +224,20 @@ export function PertemuanTab({ rps }: Props) {
             </div>
           ) : (
             <div className="rounded-lg border overflow-hidden">
-              <div className="max-h-[560px] overflow-auto scrollbar-thin">
+              <div className="max-h-[600px] overflow-auto scrollbar-thin">
                 <Table>
                   <TableHeader className="sticky top-0 bg-muted z-10">
                     <TableRow>
                       <TableHead className="w-12">Mgg</TableHead>
-                      <TableHead className="min-w-48">Materi</TableHead>
-                      <TableHead className="w-32">Metode</TableHead>
+                      <TableHead className="min-w-32">Sub-CPMK</TableHead>
+                      <TableHead className="min-w-40">Materi</TableHead>
+                      <TableHead className="min-w-32">Kemampuan Akhir</TableHead>
+                      <TableHead className="min-w-28">Indikator</TableHead>
+                      <TableHead className="min-w-24">Teknik</TableHead>
+                      <TableHead className="min-w-32">Kriteria</TableHead>
+                      <TableHead className="w-20">TM/Daring</TableHead>
                       <TableHead className="w-20">Bobot</TableHead>
-                      <TableHead className="w-28">Waktu</TableHead>
-                      <TableHead className="w-20 text-right">Aksi</TableHead>
+                      <TableHead className="w-24 text-right">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -221,20 +247,55 @@ export function PertemuanTab({ rps }: Props) {
                         className="cursor-pointer hover:bg-accent/40"
                         onClick={() => setEditing(p)}
                       >
-                        <TableCell className="font-medium text-center">{p.mingguKe}</TableCell>
+                        <TableCell className="font-medium text-center">
+                          {p.mingguKe}
+                        </TableCell>
                         <TableCell>
-                          <p className="font-medium text-sm line-clamp-1">{p.materi || '-'}</p>
-                          {p.subCpmkUtama && (
-                            <p className="text-xs text-muted-foreground line-clamp-1">{p.subCpmkUtama}</p>
+                          {p.subCpmkUtama ? (
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              {p.subCpmkUtama}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {p.metode ? (
-                            <Badge variant="secondary" className="text-[10px]">{p.metode}</Badge>
-                          ) : '-'}
+                          <p className="text-sm line-clamp-2">{p.materi || '-'}</p>
                         </TableCell>
-                        <TableCell className="text-center">{p.bobotPenilaian}%</TableCell>
-                        <TableCell className="text-xs">{p.estimasiWaktu || '-'}</TableCell>
+                        <TableCell>
+                          <p className="text-xs line-clamp-2">
+                            {p.kemampuanAkhir || '-'}
+                          </p>
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-xs line-clamp-2">{p.indikator || '-'}</p>
+                        </TableCell>
+                        <TableCell>
+                          {p.teknikPenilaian ? (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {p.teknikPenilaian}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-xs line-clamp-2 whitespace-pre-line">
+                            {p.kriteriaPenilaian || '-'}
+                          </p>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {p.tmDaring ? (
+                            <Badge variant="outline" className="text-[10px]">
+                              {p.tmDaring}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center font-mono">
+                          {p.bobotPenilaian}%
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-1">
                             <Button
@@ -286,6 +347,7 @@ export function PertemuanTab({ rps }: Props) {
         rpsId={rps.id}
         pertemuan={editing}
         nextMingguKe={(rps.pertemuan.reduce((m, p) => Math.max(m, p.mingguKe), 0) || 0) + 1}
+        subCpmkOptions={allSubCpmk}
       />
 
       {/* Delete */}
@@ -389,14 +451,17 @@ export function PertemuanTab({ rps }: Props) {
                           <p className="text-xs text-muted-foreground mt-0.5">
                             {p.metode} · {p.estimasiWaktu} · Bobot {p.bobotPenilaian}%
                           </p>
-                          {p.subCpmkTerkait && p.subCpmkTerkait.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {p.subCpmkTerkait.map((s, j) => (
-                                <Badge key={j} variant="outline" className="text-[10px] font-mono">
-                                  {s}
-                                </Badge>
-                              ))}
-                            </div>
+                          {p.subCpmkKode && (
+                            <p className="text-xs mt-1">
+                              <span className="font-mono">{p.subCpmkKode}</span>
+                              {p.kemampuanAkhir ? ` — ${p.kemampuanAkhir}` : ''}
+                            </p>
+                          )}
+                          {p.teknikPenilaian && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Teknik: {p.teknikPenilaian}
+                              {p.tmDaring ? ` · ${p.tmDaring}` : ''}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -465,12 +530,14 @@ function PertemuanFormDialog({
   rpsId,
   pertemuan,
   nextMingguKe,
+  subCpmkOptions,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   rpsId: string
   pertemuan: Pertemuan | null
   nextMingguKe: number
+  subCpmkOptions: Array<{ id: string; kode: string; deskripsi: string }>
 }) {
   const queryClient = useQueryClient()
   const isEdit = !!pertemuan
@@ -486,7 +553,15 @@ function PertemuanFormDialog({
     bobotPenilaian: pertemuan?.bobotPenilaian ?? 0,
     estimasiWaktu: pertemuan?.estimasiWaktu ?? '150 menit',
     subCpmkUtama: pertemuan?.subCpmkUtama ?? '',
+    kemampuanAkhir: pertemuan?.kemampuanAkhir ?? '',
+    indikator: pertemuan?.indikator ?? '',
+    teknikPenilaian: pertemuan?.teknikPenilaian ?? '',
+    kriteriaPenilaian: pertemuan?.kriteriaPenilaian ?? '',
+    tmDaring: pertemuan?.tmDaring ?? 'TM',
   })
+
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((f) => ({ ...f, [key]: value }))
 
   const mut = useMutation({
     mutationFn: async () => {
@@ -499,6 +574,11 @@ function PertemuanFormDialog({
         pengalamanBelajar: form.pengalamanBelajar || null,
         indikatorPenilaian: form.indikatorPenilaian || null,
         subCpmkUtama: form.subCpmkUtama || null,
+        kemampuanAkhir: form.kemampuanAkhir || null,
+        indikator: form.indikator || null,
+        teknikPenilaian: form.teknikPenilaian || null,
+        kriteriaPenilaian: form.kriteriaPenilaian || null,
+        tmDaring: form.tmDaring || null,
       }
       if (isEdit && pertemuan) {
         return api.updatePertemuan(pertemuan.id, payload)
@@ -515,14 +595,15 @@ function PertemuanFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto scrollbar-thin">
+      <DialogContent className="sm:max-w-[720px] max-h-[90vh] overflow-y-auto scrollbar-thin">
         <DialogHeader>
           <DialogTitle>{isEdit ? `Edit Pertemuan ${pertemuan?.mingguKe}` : 'Tambah Pertemuan'}</DialogTitle>
-          <DialogDescription>Detail rencana pembelajaran untuk satu pertemuan.</DialogDescription>
+          <DialogDescription>Detail rencana pembelajaran untuk satu pertemuan (format OBE).</DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
-          <div className="grid grid-cols-3 gap-3">
+          {/* OBE baris 1: Minggu, Sub-CPMK, TM/Daring, Bobot, Waktu */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="mgg">Minggu Ke</Label>
               <Input
@@ -530,8 +611,44 @@ function PertemuanFormDialog({
                 type="number"
                 min={1}
                 value={form.mingguKe}
-                onChange={(e) => setForm((f) => ({ ...f, mingguKe: Number(e.target.value) || 1 }))}
+                onChange={(e) => set('mingguKe', Number(e.target.value) || 1)}
               />
+            </div>
+            <div className="grid gap-2 md:col-span-2">
+              <Label htmlFor="subcpmk">Sub-CPMK</Label>
+              <Select
+                value={form.subCpmkUtama}
+                onValueChange={(v) => set('subCpmkUtama', v === '__none' ? '' : v)}
+              >
+                <SelectTrigger id="subcpmk">
+                  <SelectValue placeholder="Pilih Sub-CPMK" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">- Tidak ada -</SelectItem>
+                  {subCpmkOptions.map((s) => (
+                    <SelectItem key={s.id} value={s.kode}>
+                      {s.kode} — {s.deskripsi.slice(0, 60)}
+                      {s.deskripsi.length > 60 ? '...' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="tmdaring">TM/Daring</Label>
+              <Select
+                value={form.tmDaring}
+                onValueChange={(v) => set('tmDaring', v)}
+              >
+                <SelectTrigger id="tmdaring">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TM">TM (Tatap Muka)</SelectItem>
+                  <SelectItem value="Daring">Daring</SelectItem>
+                  <SelectItem value="TM + Daring">TM + Daring</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="bobot">Bobot (%)</Label>
@@ -542,18 +659,21 @@ function PertemuanFormDialog({
                 max={100}
                 value={form.bobotPenilaian}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, bobotPenilaian: Number(e.target.value) || 0 }))
+                  set('bobotPenilaian', Number(e.target.value) || 0)
                 }
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="waktu">Estimasi Waktu</Label>
-              <Input
-                id="waktu"
-                value={form.estimasiWaktu}
-                onChange={(e) => setForm((f) => ({ ...f, estimasiWaktu: e.target.value }))}
-              />
-            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="kemampuan">Kemampuan Akhir</Label>
+            <Textarea
+              id="kemampuan"
+              rows={2}
+              placeholder="Sebagai kemampuan akhir yang diharapkan dari Sub-CPMK..."
+              value={form.kemampuanAkhir}
+              onChange={(e) => set('kemampuanAkhir', e.target.value)}
+            />
           </div>
 
           <div className="grid gap-2">
@@ -561,19 +681,66 @@ function PertemuanFormDialog({
             <Textarea
               id="materi"
               rows={2}
+              placeholder="Materi pembelajaran (sertakan pustakanya)..."
               value={form.materi}
-              onChange={(e) => setForm((f) => ({ ...f, materi: e.target.value }))}
+              onChange={(e) => set('materi', e.target.value)}
             />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="indikator">Indikator</Label>
+              <Textarea
+                id="indikator"
+                rows={2}
+                placeholder="Indikator penilaian..."
+                value={form.indikator}
+                onChange={(e) => set('indikator', e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="teknik">Teknik Penilaian</Label>
+              <Input
+                id="teknik"
+                placeholder="Tes Tertulis, Observasi, Kinerja..."
+                value={form.teknikPenilaian}
+                onChange={(e) => set('teknikPenilaian', e.target.value)}
+              />
+            </div>
+          </div>
+
           <div className="grid gap-2">
-            <Label htmlFor="metode">Metode Pembelajaran</Label>
-            <Input
-              id="metode"
-              placeholder="Ceramah, Diskusi, Praktikum..."
-              value={form.metode}
-              onChange={(e) => setForm((f) => ({ ...f, metode: e.target.value }))}
+            <Label htmlFor="kriteria">Kriteria Penilaian (Rubrik)</Label>
+            <Textarea
+              id="kriteria"
+              rows={3}
+              placeholder="A=91-100; A-=86-90; B+=81-85; B=76-80; ..."
+              value={form.kriteriaPenilaian}
+              onChange={(e) => set('kriteriaPenilaian', e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Pisahkan tiap level dengan titik koma (;) atau baris baru.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="metode">Metode Pembelajaran</Label>
+              <Input
+                id="metode"
+                placeholder="Ceramah, Diskusi, Praktikum..."
+                value={form.metode}
+                onChange={(e) => set('metode', e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="waktu">Estimasi Waktu</Label>
+              <Input
+                id="waktu"
+                value={form.estimasiWaktu}
+                onChange={(e) => set('estimasiWaktu', e.target.value)}
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -583,7 +750,7 @@ function PertemuanFormDialog({
                 id="adosen"
                 rows={3}
                 value={form.aktivitasDosen}
-                onChange={(e) => setForm((f) => ({ ...f, aktivitasDosen: e.target.value }))}
+                onChange={(e) => set('aktivitasDosen', e.target.value)}
               />
             </div>
             <div className="grid gap-2">
@@ -592,7 +759,7 @@ function PertemuanFormDialog({
                 id="amhs"
                 rows={3}
                 value={form.aktivitasMhs}
-                onChange={(e) => setForm((f) => ({ ...f, aktivitasMhs: e.target.value }))}
+                onChange={(e) => set('aktivitasMhs', e.target.value)}
               />
             </div>
           </div>
@@ -603,17 +770,7 @@ function PertemuanFormDialog({
               id="pengalaman"
               rows={2}
               value={form.pengalamanBelajar}
-              onChange={(e) => setForm((f) => ({ ...f, pengalamanBelajar: e.target.value }))}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="indikator">Indikator Penilaian</Label>
-            <Textarea
-              id="indikator"
-              rows={2}
-              value={form.indikatorPenilaian}
-              onChange={(e) => setForm((f) => ({ ...f, indikatorPenilaian: e.target.value }))}
+              onChange={(e) => set('pengalamanBelajar', e.target.value)}
             />
           </div>
         </div>

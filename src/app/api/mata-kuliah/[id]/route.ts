@@ -34,7 +34,18 @@ export async function PUT(req: NextRequest, { params }: Params) {
   try {
     const { id } = await params
     const body = await req.json()
-    const { kode, nama, sks, semester, prodi, deskripsi, prasyarat } = body
+    const {
+      kode,
+      nama,
+      sks,
+      sksTeori,
+      sksPraktek,
+      rumpunMk,
+      semester,
+      prodi,
+      deskripsi,
+      prasyarat,
+    } = body
 
     const existing = await db.mataKuliah.findUnique({ where: { id } })
     if (!existing) {
@@ -47,6 +58,9 @@ export async function PUT(req: NextRequest, { params }: Params) {
         kode: kode ?? existing.kode,
         nama: nama ?? existing.nama,
         sks: sks != null ? Number(sks) : existing.sks,
+        sksTeori: sksTeori != null ? Number(sksTeori) : existing.sksTeori,
+        sksPraktek: sksPraktek != null ? Number(sksPraktek) : existing.sksPraktek,
+        rumpunMk: rumpunMk !== undefined ? (rumpunMk || null) : existing.rumpunMk,
         semester: semester != null ? Number(semester) : existing.semester,
         prodi: prodi ?? existing.prodi,
         deskripsi: deskripsi ?? null,

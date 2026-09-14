@@ -1,0 +1,773 @@
+     1→'use client'
+     2→
+     3→import { useState } from 'react'
+     4→import { useMutation, useQueryClient } from '@tanstack/react-query'
+     5→import { toast } from 'sonner'
+     6→import {
+     7→  Plus,
+     8→  Pencil,
+     9→  Trash2,
+    10→  Sparkles,
+    11→  Loader2,
+    12→  ChevronDown,
+    13→  ChevronRight,
+    14→  Save,
+    15→  X,
+    16→  Wand2,
+    17→} from 'lucide-react'
+    18→
+    19→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+    20→import { Button } from '@/components/ui/button'
+    21→import { Input } from '@/components/ui/input'
+    22→import { Label } from '@/components/ui/label'
+    23→import { Textarea } from '@/components/ui/textarea'
+    24→import { Badge } from '@/components/ui/badge'
+    25→import {
+    26→  Dialog,
+    27→  DialogContent,
+    28→  DialogDescription,
+    29→  DialogFooter,
+    30→  DialogHeader,
+    31→  DialogTitle,
+    32→} from '@/components/ui/dialog'
+    33→import {
+    34→  AlertDialog,
+    35→  AlertDialogAction,
+    36→  AlertDialogCancel,
+    37→  AlertDialogContent,
+    38→  AlertDialogDescription,
+    39→  AlertDialogFooter,
+    40→  AlertDialogHeader,
+    41→  AlertDialogTitle,
+    42→} from '@/components/ui/alert-dialog'
+    43→import { api, type RpsDetail, type Cpmk } from '@/lib/api'
+    44→import { useAsyncAiJob } from '@/hooks/use-async-ai-job'
+    45→
+    46→interface Props {
+    47→  rps: RpsDetail
+    48→}
+    49→
+    50→interface GeneratedCpmk {
+    51→  kode: string
+    52→  deskripsi: string
+    53→  subCpmk: Array<{ kode: string; deskripsi: string }>
+    54→}
+    55→
+    56→export function CpmkTab({ rps }: Props) {
+    57→  const queryClient = useQueryClient()
+    58→
+    59→  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+    60→  const [editingCpmk, setEditingCpmk] = useState<Cpmk | null>(null)
+    61→  const [editingSubCpmk, setEditingSubCpmk] = useState<{ cpmkId: string; subCpmk: Cpmk['subCpmk'][number] } | null>(null)
+    62→  const [addCpmkOpen, setAddCpmkOpen] = useState(false)
+    63→  const [addSubCpmkFor, setAddSubCpmkFor] = useState<string | null>(null)
+    64→  const [deleteCpmk, setDeleteCpmk] = useState<Cpmk | null>(null)
+    65→  const [deleteSubCpmk, setDeleteSubCpmk] = useState<{ cpmkId: string; subCpmk: Cpmk['subCpmk'][number] } | null>(null)
+    66→
+    67→  // AI generate state
+    68→  const [aiOpen, setAiOpen] = useState(false)
+    69→  const [aiJumlah, setAiJumlah] = useState(4)
+    70→  const [aiResult, setAiResult] = useState<GeneratedCpmk[] | null>(null)
+    71→  const [aiApplyConfirm, setAiApplyConfirm] = useState(false)
+    72→
+    73→  const toggleCollapse = (id: string) => {
+    74→    setCollapsed((prev) => {
+    75→      const next = new Set(prev)
+    76→      if (next.has(id)) next.delete(id)
+    77→      else next.add(id)
+    78→      return next
+    79→    })
+    80→  }
+    81→
+    82→  // Mutations
+    83→  const deleteCpmkMut = useMutation({
+    84→    mutationFn: (id: string) => api.deleteCpmk(rps.id, id),
+    85→    onSuccess: () => {
+    86→      toast.success('CPMK dihapus')
+    87→      queryClient.invalidateQueries({ queryKey: ['rps', rps.id] })
+    88→      setDeleteCpmk(null)
+    89→    },
+    90→    onError: (e: Error) => toast.error(e.message),
+    91→  })
+    92→
+    93→  const deleteSubMut = useMutation({
+    94→    mutationFn: (id: string) => api.deleteSubCpmk(id),
+    95→    onSuccess: () => {
+    96→      toast.success('Sub-CPMK dihapus')
+    97→      queryClient.invalidateQueries({ queryKey: ['rps', rps.id] })
+    98→      setDeleteSubCpmk(null)
+    99→    },
+   100→    onError: (e: Error) => toast.error(e.message),
+   101→  })
+   102→
+   103→  const aiGen = useAsyncAiJob<{ cpmk: GeneratedCpmk[] }>({
+   104→    onSuccess: (data) => {
+   105→      setAiResult(data.cpmk)
+   106→      toast.success(`${data.cpmk.length} CPMK berhasil dibuat`)
+   107→    },
+   108→    onError: (msg) => toast.error(msg),
+   109→  })
+   110→
+   111→  const aiApplyMut = useMutation({
+   112→    mutationFn: async () => {
+   113→      if (!aiResult) return
+   114→      // Optionally clear existing CPMK? We'll add new ones to keep safe — but prompt asked for "may overwrite"
+   115→      // We append with shifted urutan
+   116→      const existingCount = rps.cpmk.length
+   117→      for (let i = 0; i < aiResult.length; i++) {
+   118→        const c = aiResult[i]
+   119→        const created = await api.createCpmk(rps.id, {
+   120→          kode: c.kode,
+   121→          deskripsi: c.deskripsi,
+   122→          urutan: existingCount + i + 1,
+   123→        })
+   124→        for (let j = 0; j < c.subCpmk.length; j++) {
+   125→          const s = c.subCpmk[j]
+   126→          await api.createSubCpmk(created.id, { kode: s.kode, deskripsi: s.deskripsi, urutan: j + 1 })
+   127→        }
+   128→      }
+   129→    },
+   130→    onSuccess: () => {
+   131→      toast.success('CPMK dari AI diterapkan ke RPS')
+   132→      queryClient.invalidateQueries({ queryKey: ['rps', rps.id] })
+   133→      setAiApplyConfirm(false)
+   134→      setAiOpen(false)
+   135→      setAiResult(null)
+   136→    },
+   137→    onError: (e: Error) => toast.error(e.message),
+   138→  })
+   139→
+   140→  const aiReplaceMut = useMutation({
+   141→    mutationFn: async () => {
+   142→      if (!aiResult) return
+   143→      // Delete all existing CPMK then add new
+   144→      for (const c of rps.cpmk) {
+   145→        await api.deleteCpmk(rps.id, c.id)
+   146→      }
+   147→      for (let i = 0; i < aiResult.length; i++) {
+   148→        const c = aiResult[i]
+   149→        const created = await api.createCpmk(rps.id, {
+   150→          kode: c.kode,
+   151→          deskripsi: c.deskripsi,
+   152→          urutan: i + 1,
+   153→        })
+   154→        for (let j = 0; j < c.subCpmk.length; j++) {
+   155→          const s = c.subCpmk[j]
+   156→          await api.createSubCpmk(created.id, { kode: s.kode, deskripsi: s.deskripsi, urutan: j + 1 })
+   157→        }
+   158→      }
+   159→    },
+   160→    onSuccess: () => {
+   161→      toast.success('CPMK diganti dengan hasil AI')
+   162→      queryClient.invalidateQueries({ queryKey: ['rps', rps.id] })
+   163→      setAiApplyConfirm(false)
+   164→      setAiOpen(false)
+   165→      setAiResult(null)
+   166→    },
+   167→    onError: (e: Error) => toast.error(e.message),
+   168→  })
+   169→
+   170→  return (
+   171→    <div className="space-y-4">
+   172→      <Card>
+   173→        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+   174→          <div>
+   175→            <CardTitle className="text-base">Capaian Pembelajaran Mata Kuliah (CPMK)</CardTitle>
+   176→            <CardDescription>
+   177→              {rps.cpmk.length} CPMK · {rps.cpmk.reduce((sum, c) => sum + c.subCpmk.length, 0)} Sub-CPMK
+   178→            </CardDescription>
+   179→          </div>
+   180→          <div className="flex gap-2 shrink-0">
+   181→            <Button
+   182→              variant="outline"
+   183→              onClick={() => {
+   184→                setAiResult(null)
+   185→                setAiOpen(true)
+   186→              }}
+   187→            >
+   188→              <Sparkles className="size-4 mr-2" /> Generate AI
+   189→            </Button>
+   190→            <Button onClick={() => setAddCpmkOpen(true)} className="bg-primary hover:bg-primary/90">
+   191→              <Plus className="size-4 mr-2" /> Tambah CPMK
+   192→            </Button>
+   193→          </div>
+   194→        </CardHeader>
+   195→        <CardContent className="space-y-3">
+   196→          {rps.cpmk.length === 0 ? (
+   197→            <div className="py-10 text-center text-sm text-muted-foreground">
+   198→              <Sparkles className="size-8 mx-auto mb-2 opacity-40" />
+   199→              Belum ada CPMK. Tambah manual atau generate dengan AI.
+   200→            </div>
+   201→          ) : (
+   202→            rps.cpmk.map((cpmk) => {
+   203→              const isCollapsed = collapsed.has(cpmk.id)
+   204→              return (
+   205→                <Card key={cpmk.id} className="border-l-4 border-l-primary/60">
+   206→                  <CardContent className="p-4">
+   207→                    <div className="flex items-start gap-3">
+   208→                      <button
+   209→                        onClick={() => toggleCollapse(cpmk.id)}
+   210→                        className="mt-1 p-1 rounded hover:bg-accent"
+   211→                        aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+   212→                      >
+   213→                        {isCollapsed ? (
+   214→                          <ChevronRight className="size-4" />
+   215→                        ) : (
+   216→                          <ChevronDown className="size-4" />
+   217→                        )}
+   218→                      </button>
+   219→                      <Badge variant="secondary" className="font-mono shrink-0">
+   220→                        {cpmk.kode}
+   221→                      </Badge>
+   222→                      <p className="text-sm flex-1">{cpmk.deskripsi}</p>
+   223→                      <div className="flex gap-1 shrink-0">
+   224→                        <Button
+   225→                          size="icon"
+   226→                          variant="ghost"
+   227→                          className="size-8"
+   228→                          onClick={() => setEditingCpmk(cpmk)}
+   229→                          aria-label="Edit CPMK"
+   230→                        >
+   231→                          <Pencil className="size-3.5" />
+   232→                        </Button>
+   233→                        <Button
+   234→                          size="icon"
+   235→                          variant="ghost"
+   236→                          className="size-8 text-destructive hover:text-destructive"
+   237→                          onClick={() => setDeleteCpmk(cpmk)}
+   238→                          aria-label="Hapus CPMK"
+   239→                        >
+   240→                          <Trash2 className="size-3.5" />
+   241→                        </Button>
+   242→                      </div>
+   243→                    </div>
+   244→
+   245→                    {!isCollapsed && (
+   246→                      <div className="ml-9 mt-3 space-y-2">
+   247→                        <div className="flex items-center justify-between">
+   248→                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+   249→                            Sub-CPMK ({cpmk.subCpmk.length})
+   250→                          </p>
+   251→                          <Button
+   252→                            size="sm"
+   253→                            variant="ghost"
+   254→                            className="h-7 text-xs"
+   255→                            onClick={() => setAddSubCpmkFor(cpmk.id)}
+   256→                          >
+   257→                            <Plus className="size-3 mr-1" /> Sub-CPMK
+   258→                          </Button>
+   259→                        </div>
+   260→                        {cpmk.subCpmk.length === 0 ? (
+   261→                          <p className="text-xs text-muted-foreground italic pl-3">
+   262→                            Belum ada Sub-CPMK.
+   263→                          </p>
+   264→                        ) : (
+   265→                          <ul className="space-y-1.5">
+   266→                            {cpmk.subCpmk.map((sub) => (
+   267→                              <li
+   268→                                key={sub.id}
+   269→                                className="flex items-start gap-2 text-sm pl-3 border-l-2 border-muted"
+   270→                              >
+   271→                                <Badge variant="outline" className="font-mono text-[10px] shrink-0">
+   272→                                  {sub.kode}
+   273→                                </Badge>
+   274→                                <p className="flex-1">{sub.deskripsi}</p>
+   275→                                <Button
+   276→                                  size="icon"
+   277→                                  variant="ghost"
+   278→                                  className="size-6"
+   279→                                  onClick={() =>
+   280→                                    setEditingSubCpmk({ cpmkId: cpmk.id, subCpmk: sub })
+   281→                                  }
+   282→                                  aria-label="Edit Sub-CPMK"
+   283→                                >
+   284→                                  <Pencil className="size-3" />
+   285→                                </Button>
+   286→                                <Button
+   287→                                  size="icon"
+   288→                                  variant="ghost"
+   289→                                  className="size-6 text-destructive hover:text-destructive"
+   290→                                  onClick={() =>
+   291→                                    setDeleteSubCpmk({ cpmkId: cpmk.id, subCpmk: sub })
+   292→                                  }
+   293→                                  aria-label="Hapus Sub-CPMK"
+   294→                                >
+   295→                                  <Trash2 className="size-3" />
+   296→                                </Button>
+   297→                              </li>
+   298→                            ))}
+   299→                          </ul>
+   300→                        )}
+   301→                      </div>
+   302→                    )}
+   303→                  </CardContent>
+   304→                </Card>
+   305→              )
+   306→            })
+   307→          )}
+   308→        </CardContent>
+   309→      </Card>
+   310→
+   311→      {/* Add / Edit CPMK dialog */}
+   312→      <CpmkFormDialog
+   313→        open={!!editingCpmk || addCpmkOpen}
+   314→        onOpenChange={(o) => {
+   315→          if (!o) {
+   316→            setEditingCpmk(null)
+   317→            setAddCpmkOpen(false)
+   318→          }
+   319→        }}
+   320→        rpsId={rps.id}
+   321→        cpmk={editingCpmk}
+   322→      />
+   323→
+   324→      {/* Add / Edit Sub-CPMK dialog */}
+   325→      <SubCpmkFormDialog
+   326→        open={!!editingSubCpmk || !!addSubCpmkFor}
+   327→        onOpenChange={(o) => {
+   328→          if (!o) {
+   329→            setEditingSubCpmk(null)
+   330→            setAddSubCpmkFor(null)
+   331→          }
+   332→        }}
+   333→        cpmkId={editingSubCpmk?.cpmkId ?? addSubCpmkFor ?? ''}
+   334→        subCpmk={editingSubCpmk?.subCpmk ?? null}
+   335→      />
+   336→
+   337→      {/* Delete CPMK */}
+   338→      <AlertDialog open={!!deleteCpmk} onOpenChange={(o) => !o && setDeleteCpmk(null)}>
+   339→        <AlertDialogContent>
+   340→          <AlertDialogHeader>
+   341→            <AlertDialogTitle>Hapus CPMK?</AlertDialogTitle>
+   342→            <AlertDialogDescription>
+   343→              Menghapus <strong>{deleteCpmk?.kode}</strong> juga akan menghapus seluruh Sub-CPMK
+   344→              di dalamnya. Tindakan ini tidak dapat dibatalkan.
+   345→            </AlertDialogDescription>
+   346→          </AlertDialogHeader>
+   347→          <AlertDialogFooter>
+   348→            <AlertDialogCancel>Batal</AlertDialogCancel>
+   349→            <AlertDialogAction
+   350→              className="bg-destructive hover:bg-destructive/90 text-white"
+   351→              onClick={() => deleteCpmk && deleteCpmkMut.mutate(deleteCpmk.id)}
+   352→              disabled={deleteCpmkMut.isPending}
+   353→            >
+   354→              Hapus
+   355→            </AlertDialogAction>
+   356→          </AlertDialogFooter>
+   357→        </AlertDialogContent>
+   358→      </AlertDialog>
+   359→
+   360→      {/* Delete Sub-CPMK */}
+   361→      <AlertDialog open={!!deleteSubCpmk} onOpenChange={(o) => !o && setDeleteSubCpmk(null)}>
+   362→        <AlertDialogContent>
+   363→          <AlertDialogHeader>
+   364→            <AlertDialogTitle>Hapus Sub-CPMK?</AlertDialogTitle>
+   365→            <AlertDialogDescription>
+   366→              Hapus <strong>{deleteSubCpmk?.subCpmk.kode}</strong>? Tindakan ini tidak dapat
+   367→              dibatalkan.
+   368→            </AlertDialogDescription>
+   369→          </AlertDialogHeader>
+   370→          <AlertDialogFooter>
+   371→            <AlertDialogCancel>Batal</AlertDialogCancel>
+   372→            <AlertDialogAction
+   373→              className="bg-destructive hover:bg-destructive/90 text-white"
+   374→              onClick={() =>
+   375→                deleteSubCpmk && deleteSubMut.mutate(deleteSubCpmk.subCpmk.id)
+   376→              }
+   377→              disabled={deleteSubMut.isPending}
+   378→            >
+   379→              Hapus
+   380→            </AlertDialogAction>
+   381→          </AlertDialogFooter>
+   382→        </AlertDialogContent>
+   383→      </AlertDialog>
+   384→
+   385→      {/* AI Generate Dialog */}
+   386→      <Dialog open={aiOpen} onOpenChange={setAiOpen}>
+   387→        <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto scrollbar-thin">
+   388→          <DialogHeader>
+   389→            <DialogTitle className="flex items-center gap-2">
+   390→              <Sparkles className="size-5 text-primary" /> Generate CPMK dengan AI
+   391→            </DialogTitle>
+   392→            <DialogDescription>
+   393→              AI akan menyusun CPMK dan Sub-CPMK berdasarkan informasi mata kuliah{' '}
+   394→              <strong>{rps.mataKuliah.nama}</strong>.
+   395→            </DialogDescription>
+   396→          </DialogHeader>
+   397→
+   398→          {!aiResult ? (
+   399→            <div className="space-y-4 py-2">
+   400→              <div className="grid gap-2">
+   401→                <Label htmlFor="jumlah">Jumlah CPMK yang diinginkan</Label>
+   402→                <Input
+   403→                  id="jumlah"
+   404→                  type="number"
+   405→                  min={1}
+   406→                  max={10}
+   407→                  value={aiJumlah}
+   408→                  onChange={(e) => setAiJumlah(Math.max(1, Math.min(10, Number(e.target.value) || 4)))}
+   409→                />
+   410→                <p className="text-xs text-muted-foreground">
+   411→                  Setiap CPMK akan memiliki 2-3 Sub-CPMK.
+   412→                </p>
+   413→              </div>
+   414→
+   415→              <div className="rounded-lg bg-muted/50 p-3 text-xs">
+   416→                <p className="font-medium mb-1">Konteks yang dikirim ke AI:</p>
+   417→                <ul className="space-y-0.5 text-muted-foreground">
+   418→                  <li>Mata Kuliah: {rps.mataKuliah.nama} ({rps.mataKuliah.kode})</li>
+   419→                  <li>SKS: {rps.mataKuliah.sks} · Semester: {rps.mataKuliah.semester}</li>
+   420→                  <li>Prodi: {rps.mataKuliah.prodi}</li>
+   421→                  <li className="line-clamp-2">Deskripsi: {rps.deskripsi || rps.mataKuliah.deskripsi}</li>
+   422→                </ul>
+   423→              </div>
+   424→
+   425→              <DialogFooter>
+   426→                <Button variant="outline" onClick={() => setAiOpen(false)}>
+   427→                  Batal
+   428→                </Button>
+   429→                <Button
+   430→                  onClick={() =>
+   431→                    aiGen.mutate(() =>
+   432→                      api.generateCpmk({
+   433→                        namaMataKuliah: rps.mataKuliah.nama,
+   434→                        deskripsi: rps.deskripsi || rps.mataKuliah.deskripsi || '',
+   435→                        sks: rps.mataKuliah.sks,
+   436→                        prodi: rps.mataKuliah.prodi,
+   437→                        semester: rps.mataKuliah.semester,
+   438→                        jumlahCpmk: aiJumlah,
+   439→                      })
+   440→                    )
+   441→                  }
+   442→                  disabled={aiGen.isPending}
+   443→                  className="bg-primary hover:bg-primary/90"
+   444→                >
+   445→                  {aiGen.isPending ? (
+   446→                    <Loader2 className="size-4 mr-2 animate-spin" />
+   447→                  ) : (
+   448→                    <Wand2 className="size-4 mr-2" />
+   449→                  )}
+   450→                  {aiGen.isPending ? `Generate... ${aiGen.progress}%` : 'Generate'}
+   451→                </Button>
+   452→              </DialogFooter>
+   453→            </div>
+   454→          ) : (
+   455→            <div className="space-y-3 py-2">
+   456→              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 p-3 text-xs">
+   457→                <p className="font-medium text-emerald-800 dark:text-emerald-200">
+   458→                  {aiResult.length} CPMK berhasil dibuat. Tinjau hasil di bawah ini.
+   459→                </p>
+   460→                <p className="text-emerald-700 dark:text-emerald-300 mt-0.5">
+   461→                  Total Sub-CPMK: {aiResult.reduce((s, c) => s + c.subCpmk.length, 0)}
+   462→                </p>
+   463→              </div>
+   464→
+   465→              <div className="max-h-72 overflow-y-auto scrollbar-thin space-y-3 pr-1">
+   466→                {aiResult.map((c, i) => (
+   467→                  <Card key={i}>
+   468→                    <CardContent className="p-3">
+   469→                      <div className="flex items-start gap-2">
+   470→                        <Badge variant="secondary" className="font-mono shrink-0">
+   471→                          {c.kode}
+   472→                        </Badge>
+   473→                        <p className="text-sm">{c.deskripsi}</p>
+   474→                      </div>
+   475→                      <ul className="mt-2 ml-7 space-y-1">
+   476→                        {c.subCpmk.map((s, j) => (
+   477→                          <li key={j} className="text-xs flex gap-2">
+   478→                            <span className="font-mono text-muted-foreground shrink-0">{s.kode}</span>
+   479→                            <span>{s.deskripsi}</span>
+   480→                          </li>
+   481→                        ))}
+   482→                      </ul>
+   483→                    </CardContent>
+   484→                  </Card>
+   485→                ))}
+   486→              </div>
+   487→
+   488→              <DialogFooter className="flex-col gap-2 sm:flex-row">
+   489→                <Button variant="ghost" onClick={() => setAiResult(null)} className="sm:mr-auto">
+   490→                  <X className="size-4 mr-1" /> Batal
+   491→                </Button>
+   492→                <Button
+   493→                  variant="outline"
+   494→                  onClick={() => aiApplyMut.mutate()}
+   495→                  disabled={aiApplyMut.isPending || aiReplaceMut.isPending}
+   496→                >
+   497→                  {aiApplyMut.isPending ? (
+   498→                    <Loader2 className="size-4 mr-2 animate-spin" />
+   499→                  ) : (
+   500→                    <Plus className="size-4 mr-2" />
+   501→                  )}
+   502→                  Tambahkan ke yang ada
+   503→                </Button>
+   504→                <Button
+   505→                  onClick={() => setAiApplyConfirm(true)}
+   506→                  disabled={aiApplyMut.isPending || aiReplaceMut.isPending}
+   507→                  className="bg-primary hover:bg-primary/90"
+   508→                >
+   509→                  <Save className="size-4 mr-2" />
+   510→                  Ganti yang ada
+   511→                </Button>
+   512→              </DialogFooter>
+   513→            </div>
+   514→          )}
+   515→        </DialogContent>
+   516→      </Dialog>
+   517→
+   518→      {/* Replace confirm */}
+   519→      <AlertDialog open={aiApplyConfirm} onOpenChange={setAiApplyConfirm}>
+   520→        <AlertDialogContent>
+   521→          <AlertDialogHeader>
+   522→            <AlertDialogTitle>Ganti seluruh CPMK yang ada?</AlertDialogTitle>
+   523→            <AlertDialogDescription>
+   524→              Semua CPMK dan Sub-CPMK yang sudah ada ({rps.cpmk.length} CPMK) akan dihapus dan
+   525→              diganti dengan hasil AI. Pertimbangkan untuk memilih &quot;Tambahkan ke yang ada&quot;
+   526→              jika ingin mempertahankan CPMK lama.
+   527→            </AlertDialogDescription>
+   528→          </AlertDialogHeader>
+   529→          <AlertDialogFooter>
+   530→            <AlertDialogCancel>Batal</AlertDialogCancel>
+   531→            <AlertDialogAction
+   532→              className="bg-primary hover:bg-primary/90 text-white"
+   533→              onClick={() => aiReplaceMut.mutate()}
+   534→              disabled={aiReplaceMut.isPending}
+   535→            >
+   536→              {aiReplaceMut.isPending ? 'Memproses...' : 'Ya, Ganti'}
+   537→            </AlertDialogAction>
+   538→          </AlertDialogFooter>
+   539→        </AlertDialogContent>
+   540→      </AlertDialog>
+   541→    </div>
+   542→  )
+   543→}
+   544→
+   545→// ===== Helper dialog components =====
+   546→
+   547→function CpmkFormDialog({
+   548→  open,
+   549→  onOpenChange,
+   550→  rpsId,
+   551→  cpmk,
+   552→}: {
+   553→  open: boolean
+   554→  onOpenChange: (o: boolean) => void
+   555→  rpsId: string
+   556→  cpmk: Cpmk | null
+   557→}) {
+   558→  const queryClient = useQueryClient()
+   559→  const isEdit = !!cpmk
+   560→
+   561→  return (
+   562→    <CpmkFormDialogInner
+   563→      key={cpmk?.id ?? 'new'}
+   564→      open={open}
+   565→      onOpenChange={onOpenChange}
+   566→      rpsId={rpsId}
+   567→      cpmk={cpmk}
+   568→      isEdit={isEdit}
+   569→      initialKode={cpmk?.kode ?? ''}
+   570→      initialDeskripsi={cpmk?.deskripsi ?? ''}
+   571→      onSaved={() => {
+   572→        queryClient.invalidateQueries({ queryKey: ['rps', rpsId] })
+   573→      }}
+   574→    />
+   575→  )
+   576→}
+   577→
+   578→function CpmkFormDialogInner({
+   579→  open,
+   580→  onOpenChange,
+   581→  rpsId,
+   582→  cpmk,
+   583→  isEdit,
+   584→  initialKode,
+   585→  initialDeskripsi,
+   586→  onSaved,
+   587→}: {
+   588→  open: boolean
+   589→  onOpenChange: (o: boolean) => void
+   590→  rpsId: string
+   591→  cpmk: Cpmk | null
+   592→  isEdit: boolean
+   593→  initialKode: string
+   594→  initialDeskripsi: string
+   595→  onSaved: () => void
+   596→}) {
+   597→  const [kode, setKode] = useState(initialKode)
+   598→  const [deskripsi, setDeskripsi] = useState(initialDeskripsi)
+   599→
+   600→  const mut = useMutation({
+   601→    mutationFn: async () => {
+   602→      if (isEdit && cpmk) {
+   603→        return api.updateCpmk(rpsId, cpmk.id, { kode, deskripsi })
+   604→      }
+   605→      return api.createCpmk(rpsId, { kode, deskripsi })
+   606→    },
+   607→    onSuccess: () => {
+   608→      toast.success(isEdit ? 'CPMK diperbarui' : 'CPMK dibuat')
+   609→      onSaved()
+   610→      onOpenChange(false)
+   611→    },
+   612→    onError: (e: Error) => toast.error(e.message),
+   613→  })
+   614→
+   615→  return (
+   616→    <Dialog open={open} onOpenChange={onOpenChange}>
+   617→      <DialogContent className="sm:max-w-[520px]">
+   618→        <DialogHeader>
+   619→          <DialogTitle>{isEdit ? 'Edit CPMK' : 'Tambah CPMK'}</DialogTitle>
+   620→          <DialogDescription>
+   621→            {isEdit
+   622→              ? 'Perbarui kode atau deskripsi CPMK.'
+   623→              : 'Lengkapi kode dan deskripsi CPMK baru.'}
+   624→          </DialogDescription>
+   625→        </DialogHeader>
+   626→        <div className="space-y-4 py-2">
+   627→          <div className="grid gap-2">
+   628→            <Label htmlFor="kode">Kode CPMK</Label>
+   629→            <Input
+   630→              id="kode"
+   631→              placeholder="CPMK1"
+   632→              value={kode}
+   633→              onChange={(e) => setKode(e.target.value)}
+   634→            />
+   635→          </div>
+   636→          <div className="grid gap-2">
+   637→            <Label htmlFor="desk">Deskripsi CPMK</Label>
+   638→            <Textarea
+   639→              id="desk"
+   640→              rows={4}
+   641→              placeholder="Mahasiswa mampu..."
+   642→              value={deskripsi}
+   643→              onChange={(e) => setDeskripsi(e.target.value)}
+   644→            />
+   645→            <p className="text-xs text-muted-foreground">
+   646→              Gunakan kata kerja aktif taksonomi Bloom (menjelaskan, menerapkan, menganalisis, dll).
+   647→            </p>
+   648→          </div>
+   649→        </div>
+   650→        <DialogFooter>
+   651→          <Button variant="outline" onClick={() => onOpenChange(false)}>
+   652→            Batal
+   653→          </Button>
+   654→          <Button onClick={() => mut.mutate()} disabled={mut.isPending || !kode || !deskripsi}>
+   655→            {mut.isPending ? 'Menyimpan...' : 'Simpan'}
+   656→          </Button>
+   657→        </DialogFooter>
+   658→      </DialogContent>
+   659→    </Dialog>
+   660→  )
+   661→}
+   662→
+   663→function SubCpmkFormDialog({
+   664→  open,
+   665→  onOpenChange,
+   666→  cpmkId,
+   667→  subCpmk,
+   668→}: {
+   669→  open: boolean
+   670→  onOpenChange: (o: boolean) => void
+   671→  cpmkId: string
+   672→  subCpmk: Cpmk['subCpmk'][number] | null
+   673→}) {
+   674→  const queryClient = useQueryClient()
+   675→  const isEdit = !!subCpmk
+   676→
+   677→  return (
+   678→    <SubCpmkFormDialogInner
+   679→      key={subCpmk?.id ?? `new-${cpmkId}`}
+   680→      open={open}
+   681→      onOpenChange={onOpenChange}
+   682→      cpmkId={cpmkId}
+   683→      subCpmk={subCpmk}
+   684→      isEdit={isEdit}
+   685→      initialKode={subCpmk?.kode ?? ''}
+   686→      initialDeskripsi={subCpmk?.deskripsi ?? ''}
+   687→      onSaved={() => {
+   688→        queryClient.invalidateQueries({ queryKey: ['rps'] })
+   689→      }}
+   690→    />
+   691→  )
+   692→}
+   693→
+   694→function SubCpmkFormDialogInner({
+   695→  open,
+   696→  onOpenChange,
+   697→  cpmkId,
+   698→  subCpmk,
+   699→  isEdit,
+   700→  initialKode,
+   701→  initialDeskripsi,
+   702→  onSaved,
+   703→}: {
+   704→  open: boolean
+   705→  onOpenChange: (o: boolean) => void
+   706→  cpmkId: string
+   707→  subCpmk: Cpmk['subCpmk'][number] | null
+   708→  isEdit: boolean
+   709→  initialKode: string
+   710→  initialDeskripsi: string
+   711→  onSaved: () => void
+   712→}) {
+   713→  const [kode, setKode] = useState(initialKode)
+   714→  const [deskripsi, setDeskripsi] = useState(initialDeskripsi)
+   715→
+   716→  const mut = useMutation({
+   717→    mutationFn: async () => {
+   718→      if (isEdit && subCpmk) {
+   719→        return api.updateSubCpmk(subCpmk.id, { kode, deskripsi })
+   720→      }
+   721→      return api.createSubCpmk(cpmkId, { kode, deskripsi })
+   722→    },
+   723→    onSuccess: () => {
+   724→      toast.success(isEdit ? 'Sub-CPMK diperbarui' : 'Sub-CPMK dibuat')
+   725→      onSaved()
+   726→      onOpenChange(false)
+   727→    },
+   728→    onError: (e: Error) => toast.error(e.message),
+   729→  })
+   730→
+   731→  return (
+   732→    <Dialog open={open} onOpenChange={onOpenChange}>
+   733→      <DialogContent className="sm:max-w-[520px]">
+   734→        <DialogHeader>
+   735→          <DialogTitle>{isEdit ? 'Edit Sub-CPMK' : 'Tambah Sub-CPMK'}</DialogTitle>
+   736→          <DialogDescription>
+   737→            Sub-CPMK adalah penjabaran lebih spesifik dari CPMK.
+   738→          </DialogDescription>
+   739→        </DialogHeader>
+   740→        <div className="space-y-4 py-2">
+   741→          <div className="grid gap-2">
+   742→            <Label htmlFor="skode">Kode Sub-CPMK</Label>
+   743→            <Input
+   744→              id="skode"
+   745→              placeholder="Sub-CPMK1.1"
+   746→              value={kode}
+   747→              onChange={(e) => setKode(e.target.value)}
+   748→            />
+   749→          </div>
+   750→          <div className="grid gap-2">
+   751→            <Label htmlFor="sdesk">Deskripsi</Label>
+   752→            <Textarea
+   753→              id="sdesk"
+   754→              rows={3}
+   755→              placeholder="Penjabaran spesifik dari CPMK..."
+   756→              value={deskripsi}
+   757→              onChange={(e) => setDeskripsi(e.target.value)}
+   758→            />
+   759→          </div>
+   760→        </div>
+   761→        <DialogFooter>
+   762→          <Button variant="outline" onClick={() => onOpenChange(false)}>
+   763→            Batal
+   764→          </Button>
+   765→          <Button onClick={() => mut.mutate()} disabled={mut.isPending || !kode || !deskripsi}>
+   766→            {mut.isPending ? 'Menyimpan...' : 'Simpan'}
+   767→          </Button>
+   768→        </DialogFooter>
+   769→      </DialogContent>
+   770→    </Dialog>
+   771→  )
+   772→}
+   773→

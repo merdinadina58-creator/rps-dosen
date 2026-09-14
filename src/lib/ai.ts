@@ -330,6 +330,14 @@ export interface GeneratePertemuanInput {
 
 export interface PertemuanItem {
   mingguKe: number
+  // OBE fields
+  subCpmkKode?: string
+  kemampuanAkhir?: string
+  indikator?: string
+  teknikPenilaian?: string
+  kriteriaPenilaian?: string
+  tmDaring?: string
+  // Standard fields
   materi: string
   metode: string
   aktivitasDosen: string
@@ -392,8 +400,14 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   "pertemuan": [
     {
       "mingguKe": ${startWeek},
-      "materi": "...",
-      "metode": "Ceramah & Diskusi",
+      "subCpmkKode": "Sub-CPMK1.1",
+      "kemampuanAkhir": "...(deskripsi Sub-CPMK yang ditargetkan)...",
+      "indikator": "...(apa yang dinilai)...",
+      "teknikPenilaian": "Tes Tertulis",
+      "kriteriaPenilaian": "A=91-100; A-=86-90; B+=81-85; B=76-80; C=61-75; D=51-60; E≤50",
+      "tmDaring": "TM",
+      "materi": "...(sertakan pustaka)...",
+      "metode": "Ceramah & Diskusi; Penugasan: ...",
       "aktivitasDosen": "...",
       "aktivitasMhs": "...",
       "pengalamanBelajar": "...",
@@ -739,8 +753,28 @@ export interface FullRpsCpmk {
   subCpmk: Array<{ kode: string; deskripsi: string }>
 }
 
+export interface FullRpsCplProdi {
+  kode: string
+  deskripsi: string
+}
+
+export interface FullRpsKorelasi {
+  subCpmkKode: string
+  cplKode: string
+  bobot: string
+  jumlahMinggu: number
+}
+
 export interface FullRpsPertemuan {
   mingguKe: number
+  // OBE fields
+  subCpmkKode: string
+  kemampuanAkhir: string
+  indikator: string
+  teknikPenilaian: string
+  kriteriaPenilaian: string
+  tmDaring: string
+  // Standard fields (kept for compatibility)
   materi: string
   metode: string
   aktivitasDosen: string
@@ -770,8 +804,14 @@ export interface FullRpsPenilaian {
 
 export interface GenerateFullRpsResult {
   deskripsi: string
+  deskripsiSingkat: string
+  bahanKajian: string
+  mediaSoftware: string
+  mediaHardware: string
   cpl: string
+  cplProdi: FullRpsCplProdi[]
   cpmk: FullRpsCpmk[]
+  korelasi: FullRpsKorelasi[]
   pertemuan: FullRpsPertemuan[]
   penilaian: FullRpsPenilaian[]
   referensi: FullRpsReferensi[]
@@ -830,8 +870,8 @@ export async function generateFullRps(
     }
   }
 
-  // ===== Step 1 prompt (deskripsi, CPL, penilaian) =====
-  const step1Prompt = `Anda adalah pakar pendidikan tinggi Indonesia yang ahli menyusun RPS sesuai SN-Dikti/KKNI/MBKM.
+  // ===== Step 1 prompt (deskripsi, CPL Prodi, penilaian, media) =====
+  const step1Prompt = `Anda adalah pakar pendidikan tinggi Indonesia yang ahli menyusun RPS OBE (Outcome-Based Education) sesuai SN-Dikti.
 
 Buatkan untuk mata kuliah berikut:
 Nama: ${input.namaMataKuliah}
@@ -842,15 +882,28 @@ Semester: ${input.semester}
 ${input.prasyarat ? `Prasyarat: ${input.prasyarat}` : ''}
 Info: ${input.deskripsiMataKuliah}
 
-Hasilkan:
-1. DESKRIPSI mata kuliah (2-4 kalimat narasi akademik yang menarik, BUKAN copy-paste info di atas)
-2. CPL (1-2 kalimat Capaian Pembelajaran Lulusan yang relevan)
-3. PENILAIAN: 4-5 komponen dengan total bobot = 100 (Kehadiran 5-10%, Tugas 15-25%, Proyek 15-25%, UTS 25-30%, UAS 25-30%)
+Hasilkan (format OBE):
+1. DESKRIPSI lengkap (2-4 kalimat narasi akademik)
+2. DESKRIPSI_SINGKAT (1 kalimat singkat tentang mata kuliah)
+3. BAHAN_KAJIAN (daftar pokok bahasan utama, dipisah koma)
+4. CPL (1-2 kalimat ringkasan CPL)
+5. CPL_PRODI: 3-6 CPL Prodi terstruktur (kode: CPL1, CPL2, dst) yang relevan dengan mata kuliah ini
+6. MEDIA_SOFTWARE: daftar software/media digital untuk pembelajaran (PPT, e-book, aplikasi, dll)
+7. MEDIA_HARDWARE: daftar hardware/peralatan (proyektor, laptop, whiteboard, dll)
+8. PENILAIAN: 4-5 komponen dengan total bobot = 100
 
 WAJIB balas HANYA JSON valid (tanpa markdown code block):
 {
   "deskripsi": "...",
+  "deskripsiSingkat": "...",
+  "bahanKajian": "...",
   "cpl": "...",
+  "mediaSoftware": "PPT, e-book, aplikasi ...",
+  "mediaHardware": "Proyektor, laptop, whiteboard ...",
+  "cplProdi": [
+    { "kode": "CPL1", "deskripsi": "..." },
+    { "kode": "CPL2", "deskripsi": "..." }
+  ],
   "penilaian": [
     { "nama": "Kehadiran", "bobot": 10, "bentuk": "Presensi", "keterangan": "..." }
   ]
@@ -911,10 +964,24 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   // ===== Gabungkan hasil =====
   const result: GenerateFullRpsResult = {
     deskripsi: String(step1Raw.deskripsi ?? ''),
+    deskripsiSingkat: String(step1Raw.deskripsiSingkat ?? ''),
+    bahanKajian: String(step1Raw.bahanKajian ?? ''),
+    mediaSoftware: String(step1Raw.mediaSoftware ?? ''),
+    mediaHardware: String(step1Raw.mediaHardware ?? ''),
     cpl: String(step1Raw.cpl ?? ''),
+    cplProdi: Array.isArray(step1Raw.cplProdi)
+      ? (step1Raw.cplProdi as FullRpsCplProdi[])
+      : [],
     cpmk: cpmkResult.cpmk,
+    korelasi: generateKorelasiFromCpmk(cpmkResult.cpmk, step1Raw),
     pertemuan: pertemuanResult.pertemuan.map((p) => ({
       mingguKe: Number(p.mingguKe) || 0,
+      subCpmkKode: String(p.subCpmkKode ?? p.subCpmkTerkait?.[0] ?? ''),
+      kemampuanAkhir: String(p.kemampuanAkhir ?? ''),
+      indikator: String(p.indikator ?? ''),
+      teknikPenilaian: String(p.teknikPenilaian ?? 'Tes Tertulis'),
+      kriteriaPenilaian: String(p.kriteriaPenilaian ?? 'A=91-100; A-=86-90; B+=81-85; B=76-80; C=61-75; D=51-60; E≤50'),
+      tmDaring: String(p.tmDaring ?? 'TM'),
       materi: String(p.materi ?? ''),
       metode: String(p.metode ?? ''),
       aktivitasDosen: String(p.aktivitasDosen ?? ''),
@@ -958,4 +1025,36 @@ WAJIB balas HANYA JSON valid (tanpa markdown code block):
   report(100, 'Selesai')
 
   return result
+}
+
+/**
+ * Auto-generate Korelasi CPL → Sub-CPMK from CPMK/Sub-CPMK + CPL Prodi.
+ * Each Sub-CPMK is mapped to the most relevant CPL (cyclically distributed if multiple CPLs).
+ * Bobot is distributed proportionally so total = 100%.
+ * jumlahMinggu is estimated as 1 per Sub-CPMK (can be refined from pertemuan data).
+ */
+function generateKorelasiFromCpmk(
+  cpmk: FullRpsCpmk[],
+  step1Raw: Record<string, unknown>
+): FullRpsKorelasi[] {
+  const cplProdi = (step1Raw.cplProdi as FullRpsCplProdi[]) || []
+  if (cplProdi.length === 0 || cpmk.length === 0) return []
+
+  const allSubCpmk = cpmk.flatMap((c) => c.subCpmk)
+  if (allSubCpmk.length === 0) return []
+
+  const totalSub = allSubCpmk.length
+  const baseBobot = Math.floor(100 / totalSub)
+  let remaining = 100 - baseBobot * totalSub
+
+  return allSubCpmk.map((s, i) => {
+    const cplIdx = i % cplProdi.length
+    const bobot = baseBobot + (i < remaining ? 1 : 0)
+    return {
+      subCpmkKode: s.kode,
+      cplKode: cplProdi[cplIdx].kode,
+      bobot: `${bobot}%`,
+      jumlahMinggu: 1,
+    }
+  })
 }

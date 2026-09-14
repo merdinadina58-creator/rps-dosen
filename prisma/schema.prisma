@@ -1,5 +1,6 @@
-// RPS Dosen Management System - Prisma Schema
+// RPS Dosen Management System - Prisma Schema (OBE Template)
 // Database: SQLite
+// Supports: Universitas Nias Raya OBE RPS template format
 
 generator client {
   provider = "prisma-client-js"
@@ -28,9 +29,12 @@ model Dosen {
 
 model MataKuliah {
   id            String   @id @default(cuid())
-  kode          String   @unique // e.g. IF-101
+  kode          String   @unique // e.g. MKN1104
   nama          String
-  sks           Int      // Jumlah SKS
+  sks           Int      // Total SKS
+  sksTeori      Int      @default(0) // SKS Teori (T)
+  sksPraktek    Int      @default(0) // SKS Praktek (P)
+  rumpunMk     String?  // Rumpun Mata Kuliah (e.g. MKN, UNP)
   semester      Int      // Semester ke berapa
   prodi         String   // Program Studi
   deskripsi     String?
@@ -45,26 +49,46 @@ model MataKuliah {
 
 model Rps {
   id            String   @id @default(cuid())
-  judul         String   // e.g. "RPS Pemrograman Web - Semester Ganjil 2024/2025"
+  judul         String
   tahunAjaran   String   // e.g. "2024/2025"
-  semester      String   // "Ganjil" | "Genap"
-  kelas         String?  // e.g. "A", "B", "TI-3A"
+  semester      String   // "Ganjil" | "Genap" | "Pendek"
+  kelas         String?
 
-  // Identitas mata kuliah (snapshot - bisa juga diambil dari relasi)
+  // Identitas mata kuliah
   mataKuliahId  String
   mataKuliah    MataKuliah @relation(fields: [mataKuliahId], references: [id])
 
   dosenId       String
   dosen         Dosen     @relation(fields: [dosenId], references: [id])
 
-  // Deskripsi & capaian
-  deskripsi     String?
-  cpl           String?   // Capaian Pembelajaran Lulusan (text, bisa multi)
-  mingguPertemuan Int    @default(16) // Jumlah pertemuan, biasanya 16
+  // OBE: Institusi info
+  universitas   String?  // e.g. "Universitas Nias Raya"
+  fakultas      String?   // e.g. "Fakultas Keguruan dan Ilmu Pendidikan"
+  kodeDokumen   String?   // Kode dokumen RPS
+  tglPenyusunan DateTime? // Tanggal penyusunan RPS
+
+  // OBE: Deskripsi & capaian
+  deskripsi           String?   // Deskripsi lengkap
+  deskripsiSingkat    String?   // Deskripsi singkat (OBE field terpisah)
+  bahanKajian         String?   // Bahan kajian/materi pembelajaran detail
+  cpl                 String?   // CPL text (legacy, keep for compatibility)
+
+  // OBE: Media & setting
+  mediaSoftware      String?   // Media pembelajaran: software
+  mediaHardware      String?   // Media pembelajaran: hardware
+  teamTeaching       Boolean   @default(false) // Team teaching: Ya/Tidak
+  mataKuliahSyarat   String?   // Mata kuliah syarat (prasyarat di level RPS)
+
+  // OBE: Otorisasi/Pengesahan (3 signature blocks)
+  otorisasiDosenPengembang  String?  // Nama Dosen Pengembang RPS
+  otorisasiKoordinatorRmk   String?  // Nama Koordinator RMK
+  otorisasiKaprodi          String?  // Nama Kaprodi
+
+  mingguPertemuan Int    @default(16)
 
   // Pengaturan
   status        String   @default("draft") // draft | final | revisi
-  kurikulum     String   @default("MBKM")  // e.g. MBKM, KKNI
+  kurikulum     String   @default("OBE")   // OBE | MBKM | KKNI
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -73,6 +97,40 @@ model Rps {
   pertemuan     Pertemuan[]
   referensi     Referensi[]
   penilaian     KomponenPenilaian[]
+  cplProdi      CplProdi[]      // OBE: structured CPL Prodi list
+  korelasi      KorelasiCplSubCpmk[] // OBE: CPL → Sub-CPMK mapping
+}
+
+// ===== OBE: CPL Prodi (structured, multiple per RPS) =====
+
+model CplProdi {
+  id          String   @id @default(cuid())
+  rpsId       String
+  rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
+  kode        String   // e.g. "CPL1", "CPL2", "CPL4"
+  deskripsi   String   // Capaian Pembelajaran Lulusan Prodi
+  urutan      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  korelasi    KorelasiCplSubCpmk[]
+}
+
+// ===== OBE: Korelasi CPL → Sub-CPMK (matriks mapping) =====
+
+model KorelasiCplSubCpmk {
+  id          String   @id @default(cuid())
+  rpsId       String
+  rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
+  cplProdiId  String?
+  cplProdi    CplProdi? @relation(fields: [cplProdiId], references: [id], onDelete: SetNull)
+  subCpmkId   String?   // Link to Sub-CPMK (optional — can use subCpmkKode instead)
+  subCpmkKode String?   // e.g. "Sub-CPMK1.1" (denormalized for export convenience)
+  bobot       String?   // Bobot (%) e.g. "1%", "2%", "0.5%"
+  jumlahMinggu Int      @default(0) // Berapa minggu Sub-CPMK ini dibahas
+  urutan      Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // ===== CPMK & Sub-CPMK =====
@@ -82,8 +140,8 @@ model Cpmk {
   rpsId       String
   rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
   kode        String   // e.g. "CPMK1", "CPMK2"
-  deskripsi   String   // Capaian pembelajaran mata kuliah
-  bobot       Int      @default(0) // persentase bobot (optional)
+  deskripsi   String
+  bobot       Int      @default(0)
   urutan      Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -105,22 +163,36 @@ model SubCpmk {
   pertemuan   PertemuanSubCpmk[]
 }
 
-// ===== Rencana Pertemuan Mingguan =====
+// ===== Rencana Pertemuan Mingguan (OBE format) =====
 
 model Pertemuan {
   id            String   @id @default(cuid())
   rpsId         String
   rps           Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
   mingguKe      Int      // 1..16
-  subCpmkUtama  String?  // ringkasan sub cpmk yang dibahas
-  materi        String?  // materi/bahasan
-  metode        String?  // metode pembelajaran: ceramah, diskusi, praktikum
+
+  // OBE: Sub-CPMK yang ditargetkan minggu ini
+  subCpmkUtama    String?  // Kode Sub-CPMK yang dibahas (e.g. "Sub-CPMK1.1")
+  kemampuanAkhir  String?  // Sebagai kemampuan akhir yang diharapkan (Sub-CPMK desc)
+
+  // OBE: Penilaian
+  indikator       String?  // Indikator penilaian (what to assess)
+  teknikPenilaian String?  // Teknik penilaian (e.g. "Tes Tertulis", "Observasi")
+  kriteriaPenilaian String? // Rubrik: A=91-100, A-=86-90, B+=81-85, etc.
+
+  // OBE: Pembelajaran
+  tmDaring        String?  // TM (Tatap Muka) or Daring
+  materi          String?  // Materi pembelajaran (sertakan pustakanya)
+  metode          String?  // Bentuk & metode pembelajaran + penugasan mahasiswa
   aktivitasDosen  String?
   aktivitasMhs    String?
   pengalamanBelajar String?
+
+  // Legacy field (keep for compat, OBE uses teknikPenilaian + kriteriaPenilaian)
   indikatorPenilaian String?
+
   bobotPenilaian Int    @default(0) // persentase
-  estimasiWaktu String? // e.g. "150 menit"
+  estimasiWaktu String?
   urutan        Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -129,7 +201,7 @@ model Pertemuan {
   subCpmk       PertemuanSubCpmk[]
 }
 
-// Junction tables untuk relasi many-to-many
+// Junction tables
 model PertemuanCpmk {
   id          String   @id @default(cuid())
   pertemuanId String
@@ -152,14 +224,14 @@ model Referensi {
   id          String   @id @default(cuid())
   rpsId       String
   rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
-  jenis       String   @default("buku") // buku | jurnal | website | lainnya
+  jenis       String   @default("buku")
   judul       String
   pengarang   String?
   penerbit    String?
   tahun       String?
   isbn        String?
   url         String?
-  isUtama     Boolean  @default(false) // buku utama atau pendukung
+  isUtama     Boolean  @default(false) // Sumber Utama vs Pendukung
   urutan      Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -171,9 +243,9 @@ model KomponenPenilaian {
   id          String   @id @default(cuid())
   rpsId       String
   rps         Rps      @relation(fields: [rpsId], references: [id], onDelete: Cascade)
-  nama        String   // e.g. "Tugas", "UTS", "UAS", "Praktikum", "Kehadiran"
+  nama        String   // e.g. "Tugas", "UTS", "UAS", "Kehadiran"
   bobot       Int      // persentase, total harus 100
-  bentuk      String?  // bentuk penilaian: lisan, tulisan, praktik
+  bentuk      String?  // bentuk penilaian: tes, non-tes
   keterangan  String?
   urutan      Int      @default(0)
   createdAt   DateTime @default(now())

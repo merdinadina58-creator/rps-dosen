@@ -50,7 +50,20 @@ export async function POST(req: NextRequest) {
       mataKuliahId,
       dosenId,
       deskripsi,
+      deskripsiSingkat,
+      bahanKajian,
       cpl,
+      mediaSoftware,
+      mediaHardware,
+      teamTeaching,
+      mataKuliahSyarat,
+      universitas,
+      fakultas,
+      kodeDokumen,
+      tglPenyusunan,
+      otorisasiDosenPengembang,
+      otorisasiKoordinatorRmk,
+      otorisasiKaprodi,
       mingguPertemuan,
       status,
       kurikulum,
@@ -63,19 +76,38 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const nullIfEmpty = (v: unknown): string | null =>
+      v == null || (typeof v === 'string' && v.trim() === '') ? null : String(v)
+
     const rps = await db.rps.create({
       data: {
         judul,
         tahunAjaran,
         semester,
-        kelas: kelas || null,
+        kelas: nullIfEmpty(kelas),
         mataKuliahId,
         dosenId,
-        deskripsi: deskripsi || null,
-        cpl: cpl || null,
+        deskripsi: nullIfEmpty(deskripsi),
+        deskripsiSingkat: nullIfEmpty(deskripsiSingkat),
+        bahanKajian: nullIfEmpty(bahanKajian),
+        cpl: nullIfEmpty(cpl),
+        mediaSoftware: nullIfEmpty(mediaSoftware),
+        mediaHardware: nullIfEmpty(mediaHardware),
+        teamTeaching: teamTeaching != null ? Boolean(teamTeaching) : false,
+        mataKuliahSyarat: nullIfEmpty(mataKuliahSyarat),
+        universitas: nullIfEmpty(universitas),
+        fakultas: nullIfEmpty(fakultas),
+        kodeDokumen: nullIfEmpty(kodeDokumen),
+        tglPenyusunan:
+          tglPenyusunan != null && tglPenyusunan !== ''
+            ? new Date(tglPenyusunan)
+            : null,
+        otorisasiDosenPengembang: nullIfEmpty(otorisasiDosenPengembang),
+        otorisasiKoordinatorRmk: nullIfEmpty(otorisasiKoordinatorRmk),
+        otorisasiKaprodi: nullIfEmpty(otorisasiKaprodi),
         mingguPertemuan: mingguPertemuan ? Number(mingguPertemuan) : 16,
         status: status || 'draft',
-        kurikulum: kurikulum || 'MBKM',
+        kurikulum: kurikulum || 'OBE',
       },
       include: {
         mataKuliah: true,

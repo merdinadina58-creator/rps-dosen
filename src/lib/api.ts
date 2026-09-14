@@ -34,6 +34,9 @@ export interface MataKuliah {
   kode: string
   nama: string
   sks: number
+  sksTeori: number
+  sksPraktek: number
+  rumpunMk: string | null
   semester: number
   prodi: string
   deskripsi: string | null
@@ -66,6 +69,11 @@ export interface Pertemuan {
   rpsId: string
   mingguKe: number
   subCpmkUtama: string | null
+  kemampuanAkhir: string | null
+  indikator: string | null
+  teknikPenilaian: string | null
+  kriteriaPenilaian: string | null
+  tmDaring: string | null
   materi: string | null
   metode: string | null
   aktivitasDosen: string | null
@@ -109,8 +117,21 @@ export interface Rps {
   kelas: string | null
   mataKuliahId: string
   dosenId: string
+  universitas: string | null
+  fakultas: string | null
+  kodeDokumen: string | null
+  tglPenyusunan: string | null
   deskripsi: string | null
+  deskripsiSingkat: string | null
+  bahanKajian: string | null
   cpl: string | null
+  mediaSoftware: string | null
+  mediaHardware: string | null
+  teamTeaching: boolean
+  mataKuliahSyarat: string | null
+  otorisasiDosenPengembang: string | null
+  otorisasiKoordinatorRmk: string | null
+  otorisasiKaprodi: string | null
   mingguPertemuan: number
   status: string
   kurikulum: string
@@ -126,24 +147,61 @@ export interface Rps {
   }
 }
 
+export interface CplProdi {
+  id: string
+  rpsId: string
+  kode: string
+  deskripsi: string
+  urutan: number
+}
+
+export interface KorelasiCplSubCpmk {
+  id: string
+  rpsId: string
+  cplProdiId: string | null
+  subCpmkKode: string | null
+  bobot: string | null
+  jumlahMinggu: number
+  urutan: number
+}
+
 export interface RpsDetail extends Rps {
   cpmk: Cpmk[]
   pertemuan: Pertemuan[]
   referensi: Referensi[]
   penilaian: KomponenPenilaian[]
+  cplProdi: CplProdi[]
+  korelasi: KorelasiCplSubCpmk[]
 }
 
-// Hasil generate RPS lengkap oleh AI
+// Hasil generate RPS lengkap oleh AI (OBE format)
 export interface FullRpsGenerated {
   deskripsi: string
+  deskripsiSingkat: string
+  bahanKajian: string
+  mediaSoftware: string
+  mediaHardware: string
   cpl: string
+  cplProdi: Array<{ kode: string; deskripsi: string }>
   cpmk: Array<{
     kode: string
     deskripsi: string
     subCpmk: Array<{ kode: string; deskripsi: string }>
   }>
+  korelasi: Array<{
+    subCpmkKode: string
+    cplKode: string
+    bobot: string
+    jumlahMinggu: number
+  }>
   pertemuan: Array<{
     mingguKe: number
+    subCpmkKode: string
+    kemampuanAkhir: string
+    indikator: string
+    teknikPenilaian: string
+    kriteriaPenilaian: string
+    tmDaring: string
     materi: string
     metode: string
     aktivitasDosen: string
@@ -277,6 +335,70 @@ export const api = {
 
   // Stats
   getStats: () => fetchJson<Stats>('/api/stats'),
+
+  // CPL Prodi (OBE)
+  listCplProdi: (rpsId: string) =>
+    fetchJson<Array<CplProdi & { korelasi: KorelasiCplSubCpmk[] }>>(`/api/rps/${rpsId}/cpl-prodi`),
+  createCplProdi: (
+    rpsId: string,
+    data: { kode: string; deskripsi: string; urutan?: number }
+  ) =>
+    fetchJson<CplProdi>(`/api/rps/${rpsId}/cpl-prodi`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateCplProdi: (
+    rpsId: string,
+    cplId: string,
+    data: Partial<{ kode: string; deskripsi: string; urutan: number }>
+  ) =>
+    fetchJson<CplProdi>(`/api/rps/${rpsId}/cpl-prodi/${cplId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteCplProdi: (rpsId: string, cplId: string) =>
+    fetchJson<{ success: boolean }>(`/api/rps/${rpsId}/cpl-prodi/${cplId}`, {
+      method: 'DELETE',
+    }),
+
+  // Korelasi CPL -> Sub-CPMK (OBE)
+  listKorelasi: (rpsId: string) =>
+    fetchJson<Array<KorelasiCplSubCpmk & { cplProdi?: CplProdi | null }>>(`/api/rps/${rpsId}/korelasi`),
+  createKorelasi: (
+    rpsId: string,
+    data: {
+      cplProdiId?: string | null
+      subCpmkKode?: string
+      subCpmkId?: string
+      bobot?: string | null
+      jumlahMinggu?: number
+      urutan?: number
+    }
+  ) =>
+    fetchJson<KorelasiCplSubCpmk>(`/api/rps/${rpsId}/korelasi`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateKorelasi: (
+    rpsId: string,
+    korId: string,
+    data: Partial<{
+      cplProdiId: string | null
+      subCpmkKode: string | null
+      subCpmkId: string | null
+      bobot: string | null
+      jumlahMinggu: number
+      urutan: number
+    }>
+  ) =>
+    fetchJson<KorelasiCplSubCpmk>(`/api/rps/${rpsId}/korelasi/${korId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteKorelasi: (rpsId: string, korId: string) =>
+    fetchJson<{ success: boolean }>(`/api/rps/${rpsId}/korelasi/${korId}`, {
+      method: 'DELETE',
+    }),
 
   // Create RPS lengkap dengan semua relasi (dari hasil generate AI)
   createFullRps: (data: {

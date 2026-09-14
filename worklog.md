@@ -700,3 +700,182 @@ Stage Summary:
 - ✅ Covers ALL features: Generate AI, 6 tabs, Status, Clone, Export, AI Chat, Master Data, Prodi
 - ✅ Includes step-by-step instructions, tips, and FAQ
 - ✅ Quick Start section with action links to jump to relevant pages
+
+---
+Task ID: OBE-1
+Agent: OBE Integration Agent
+Task: OBE RPS Template Support — Update API routes, UI components, and Export DOCX
+
+Work Log:
+- Read worklog.md to understand prior context (22 prior tasks completed: full RPS app, AI generate, clone, validation, export DOCX/PDF all working)
+- Read prisma/schema.prisma — confirmed OBE fields already added (MataKuliah: sksTeori/sksPraktek/rumpunMk; Rps: universitas/fakultas/kodeDokumen/tglPenyusunan/deskripsiSingkat/bahanKajian/mediaSoftware/mediaHardware/teamTeaching/mataKuliahSyarat/otorisasiDosenPengembang/otorisasiKoordinatorRmk/otorisasiKaprodi; Pertemuan: kemampuanAkhir/indikator/teknikPenilaian/kriteriaPenilaian/tmDaring; New: CplProdi, KorelasiCplSubCpmk)
+- Read src/lib/ai.ts — confirmed GenerateFullRpsResult already includes cplProdi[], korelasi[], pertemuan OBE fields
+- Read src/lib/api.ts — confirmed FullRpsGenerated, Rps, Pertemuan, MataKuliah, CplProdi, KorelasiCplSubCpmk interfaces already updated with OBE fields
+
+=== A. API Routes ===
+1. src/app/api/rps/[id]/route.ts (GET/PUT):
+   - GET: added `include: { cplProdi: true, korelasi: { include: { cplProdi: true } } }` to query
+   - PUT: accept new OBE fields (universitas, fakultas, kodeDokumen, tglPenyusunan → Date, deskripsiSingkat, bahanKajian, mediaSoftware, mediaHardware, teamTeaching → Boolean, mataKuliahSyarat, otorisasiDosenPengembang/KoordinatorRmk/Kaprodi)
+   - Empty strings normalized to null via nullIfEmpty() helper
+
+2. src/app/api/rps/route.ts (POST): accept new OBE fields; default kurikulum changed from MBKM → OBE
+
+3. src/app/api/rps/create-full/route.ts: rewrote to save OBE data:
+   - Set new RPS fields (deskripsiSingkat, bahanKajian, mediaSoftware, mediaHardware) from generated
+   - Auto-set otorisasiDosenPengembang to dosen.nama if not provided
+   - Auto-set tglPenyusunan = new Date() if not provided
+   - Create CplProdi records from generated.cplProdi[] (track kode→id map)
+   - Create Sub-CPMK with id tracking (kode→id map)
+   - Create KorelasiCplSubCpmk records from generated.korelasi[] (link cplProdiId & subCpmkId by kode mapping)
+   - Pertemuan creation now includes: subCpmkUtama (from subCpmkKode), kemampuanAkhir, indikator, teknikPenilaian, kriteriaPenilaian, tmDaring
+
+4. src/app/api/mata-kuliah/route.ts (POST) + [id]/route.ts (PUT): accept sksTeori (default 0), sksPraktek (default 0), rumpunMk (nullable)
+
+5. src/app/api/rps/[id]/pertemuan/route.ts (POST) + pertemuan/[id]/route.ts (PUT): accept new OBE fields (kemampuanAkhir, indikator, teknikPenilaian, kriteriaPenilaian, tmDaring) — null/undefined → null
+
+6. NEW: src/app/api/rps/[id]/cpl-prodi/route.ts (GET list, POST create with auto-urutan)
+7. NEW: src/app/api/rps/[id]/cpl-prodi/[cplId]/route.ts (PUT update, DELETE — cascades korelasi.cplProdiId to null via onDelete: SetNull in schema)
+8. NEW: src/app/api/rps/[id]/korelasi/route.ts (GET list, POST create with validation of cplProdiId belonging to RPS)
+9. NEW: src/app/api/rps/[id]/korelasi/[korId]/route.ts (PUT update, DELETE)
+
+10. src/lib/api.ts: added 8 helpers:
+    - listCplProdi, createCplProdi, updateCplProdi, deleteCplProdi
+    - listKorelasi, createKorelasi, updateKorelasi, deleteKorelasi
+
+=== B. UI Updates ===
+
+1. src/components/views/tabs/identitas-tab.tsx — REWROTE:
+   - Split into 4 logical cards: Identitas Mata Kuliah | Institusi & Pengesahan | Deskripsi & Bahan Kajian | Media Pembelajaran & Lain-lain
+   - Added fields: universitas, fakultas, kodeDokumen, tglPenyusunan (date input), deskripsiSingkat (textarea), bahanKajian (textarea), mediaSoftware/mediaHardware (textareas), teamTeaching (Switch component), mataKuliahSyarat (input), 3 otorisasi text inputs (Dosen Pengembang RPS / Koordinator RMK / Kaprodi)
+   - Added "OBE" to kurikulum dropdown options
+   - toDateInput() helper to convert ISO date → yyyy-MM-dd for input[type=date]
+   - Save mutation sends all OBE fields in one PUT
+
+2. src/components/views/tabs/cpmk-tab.tsx — REWROTE (kept all existing CPMK/Sub-CPMK UI):
+   - Added Card #1: CPL Prodi (list with kode+deskripsi badges, add/edit/delete via CplProdiFormDialog)
+   - Added Card #2: Korelasi CPL → Sub-CPMK (table: Sub-CPMK | CPL | Bobot | Jumlah Mgg | Aksi, add/edit/delete via KorelasiFormDialog)
+   - useQuery for cplProdi + korelasi with initialData from rps.cplProdi/rps.korelasi
+   - Delete cascades: deleting CPL Prodi invalidates cpl-prodi + korelasi + rps queries
+   - Fixed early bug: CplProdiFormDialog passed kode (string like "CPL1") instead of cpl.id to updateCplProdi → fixed by passing cplId prop
+
+3. src/components/views/tabs/pertemuan-tab.tsx — REWROTE table:
+   - New table columns: Mgg | Sub-CPMK | Materi | Kemampuan Akhir | Indikator | Teknik | Kriteria | TM/Daring | Bobot | Aksi
+   - Sub-CPMK shown as Badge (font-mono text-[10px])
+   - Teknik Penilaian shown as Badge
+   - TM/Daring shown as Badge
+   - AI Replace mutation now sends OBE fields (subCpmkUtama, kemampuanAkhir, indikator, teknikPenilaian, kriteriaPenilaian, tmDaring)
+   - Edit dialog: 5-col row (Mgg/Sub-CPMK dropdown/TM-Daring dropdown/Bobot/Waktu) + Kemampuan Akhir textarea + Materi + Indikator + Teknik + Kriteria rubrik + Metode + Aktivitas Dosen/Mhs + Pengalaman
+   - Sub-CPMK dropdown uses rps.cpmk.flatMap(c => c.subCpmk) to populate options
+
+4. src/components/views/tabs/preview-tab.tsx — REWROTE:
+   - Header Institusi: shows universitas/fakultas/prodi centered with Kode Dokumen + Tgl Penyusunan
+   - Section A: Otorisasi/Pengesahan (3-col table: Dosen Pengembang RPS / Koordinator RMK / Kaprodi with NIDN/NIP line below)
+   - Section B: Identitas Mata Kuliah table (Nama, Kode MK, Rumpun MK, Bobot SKS with T/P breakdown, Semester, Prodi, Kelas, Dosen, NIP, Mata Kuliah Syarat, Kurikulum, Jumlah Pertemuan)
+   - Section C: CPL Prodi (structured table Kode|Deskripsi) with fallback to legacy cpl text
+   - Section D: CPMK (ordered list)
+   - Section E: Sub-CPMK (flat ordered list)
+   - Section F: Korelasi matrix (Sub-CPMK | each CPL column with bobot | Bobot | Jumlah Mgg)
+   - Section G/H: Deskripsi Singkat + Bahan Kajian
+   - Section I: Deskripsi lengkap (legacy)
+   - Section J: Rencana Pembelajaran Mingguan OBE table (Mgg/Sub-CPMK/Kemampuan Akhir/Indikator/Teknik & Kriteria/TM-Daring/Materi/Bobot) with TOTAL row
+   - Section K: Komponen Penilaian (existing)
+   - Section L: Referensi (Utama + Pendukung)
+   - Section M: Media Pembelajaran & Lain-lain (Software/Hardware/Team Teaching)
+   - Download section preserved at bottom (DOCX/PDF with completeness validation)
+
+=== C. Export DOCX Rewrite ===
+
+src/lib/export.ts — COMPLETE REWRITE:
+- Updated RpsExportData interface to include: universitas, fakultas, kodeDokumen, tglPenyusunan, deskripsiSingkat, bahanKajian, mediaSoftware, mediaHardware, teamTeaching, mataKuliahSyarat, 3 otorisasi fields, mataKuliah.sksTeori/sksPraktek/rumpunMk, cplProdi[], korelasi[], pertemuan OBE fields (subCpmkUtama, kemampuanAkhir, indikator, teknikPenilaian, kriteriaPenilaian, tmDaring)
+- loadRpsForExport: include cplProdi (ordered), korelasi (ordered, include cplProdi for cplKode)
+- generateRpsDocx now produces OBE template:
+  * Section 1 (Cover/Identitas):
+    - Header: universitas (upper), fakultas, "Program Studi {prodi}"
+    - Title: "RENCANA PEMBELAJARAN SEMESTER (RPS)"
+    - Subtitle: Kode Dokumen, Kurikulum, T.A.
+    - Identitas table: Nama MK, Kode MK, Rumpun MK, Bobot SKS (T/P), Semester, Tgl Penyusunan (formatted id-ID with month names), Kelas, Dosen Pengampu, NIDN/NIP, Mata Kuliah Syarat
+    - Section A: Otorisasi 3-col table (Dosen Pengembang RPS / Koordinator RMK / Kaprodi with NIDN/NIP signature line)
+    - Section B: CPL Prodi (table: Kode | Deskripsi) — fallback to legacy cpl text
+    - Section C: CPMK list (kode: deskripsi)
+    - Section D: Sub-CPMK list (kode: deskripsi)
+    - Section E: Korelasi matrix table — Sub-CPMK | {each CPL kode} | Bobot Penilaian | Jumlah Minggu (✓ or bobot value per match)
+  * Section 2 (Rencana):
+    - Section F: Deskripsi Singkat
+    - Section G: Bahan Kajian
+    - Section H: Deskripsi Mata Kuliah (lengkap, legacy)
+    - Section I: Pustaka/Referensi (Sumber Utama + Sumber Pendukung with author/title/publisher/year/url)
+    - Section J: Media Pembelajaran (Software + Hardware)
+    - Section K: Team Teaching & Mata Kuliah Syarat
+    - Section L: Rencana Pembelajaran Mingguan — big table with columns: Minggu ke- | Sub-CPMK | Kemampuan Akhir | Indikator | Teknik & Kriteria Penilaian | TM/Daring | Materi Pembelajaran | Bobot Penilaian (%) — with TOTAL row at bottom
+    - Section M: Komponen Penilaian table
+- Preserved: header (right-aligned "RPS {kode} - {nama}"), footer (page X of Y), Calibri 22pt body
+- bodyCell() helper now supports multi-line text via \n (for kriteriaPenilaian + teknikPenilaian in one cell)
+
+=== Verification ===
+- bun run lint: 0 errors ✓
+- Prisma client regenerated via `bunx prisma generate` (was stale because dev server had cached old PrismaClient instance via globalForPrisma singleton)
+- Dev server restarted via double-fork daemonization (setsid) after PrismaClient upgrade — OOM kill pattern from Task 9 was reproducible, fixed via setsid detachment
+- curl tests:
+  * GET /api/rps/[id] → 200, returns universitas/fakultas/kodeDokumen/deskripsiSingkat/bahanKajian/mediaSoftware/mediaHardware/teamTeaching/mataKuliahSyarat/otorisasi*/cplProdi[]/korelasi[]
+  * GET /api/mata-kuliah → 200, returns sksTeori/sksPraktek/rumpunMk for each MK
+  * POST /api/mata-kuliah with sksTeori=2/sksPraktek=1/rumpunMk="TEST" → 201 with new fields echoed back (cleanup: DELETE 200)
+  * POST /api/rps/[id]/cpl-prodi {kode:"CPL1",deskripsi:"..."} → 201 with id/kode/deskripsi/urutan
+  * POST /api/rps/[id]/korelasi {cplProdiId,subCpmkKode,bobot:"1%",jumlahMinggu:2} → 201 with cplProdi included
+  * PUT /api/rps/[id] with universitas/fakultas/kodeDokumen/tglPenyusunan/deskripsiSingkat/bahanKajian/mediaSoftware/mediaHardware/teamTeaching:true/mataKuliahSyarat/otorisasiDosenPengembang → 200, all fields persisted
+  * GET /api/rps/[id]/export?format=docx → 200, 16.7KB valid Word doc with OBE template
+  * GET /api/rps/[id]/export?format=pdf → 200, 150KB valid 2+ page PDF (via LibreOffice soffice)
+- No runtime errors in dev.log
+
+=== Files Modified ===
+1. src/app/api/rps/[id]/route.ts
+2. src/app/api/rps/route.ts
+3. src/app/api/rps/create-full/route.ts
+4. src/app/api/mata-kuliah/route.ts
+5. src/app/api/mata-kuliah/[id]/route.ts
+6. src/app/api/rps/[id]/pertemuan/route.ts
+7. src/app/api/pertemuan/[id]/route.ts
+8. src/lib/api.ts
+9. src/components/views/tabs/identitas-tab.tsx
+10. src/components/views/tabs/cpmk-tab.tsx
+11. src/components/views/tabs/pertemuan-tab.tsx
+12. src/components/views/tabs/preview-tab.tsx
+13. src/lib/export.ts
+
+=== Files Created ===
+1. src/app/api/rps/[id]/cpl-prodi/route.ts (GET list, POST create)
+2. src/app/api/rps/[id]/cpl-prodi/[cplId]/route.ts (PUT, DELETE)
+3. src/app/api/rps/[id]/korelasi/route.ts (GET list, POST create)
+4. src/app/api/rps/[id]/korelasi/[korId]/route.ts (PUT, DELETE)
+
+=== Issues / Notes ===
+- Dev server required restart after `bunx prisma generate` because lib/db.ts uses globalForPrisma singleton pattern that retains the OLD PrismaClient instance across HMR. Once dev server was restarted with setsid detachment, all new fields became available.
+- Existing RPS records (created before OBE schema update) have null OBE fields — UI gracefully shows "-" for null fields. New RPS records (created via AI Generate) will populate all OBE fields via the rewritten /api/rps/create-full endpoint.
+- Mata Kuliah existing records show sksTeori=0/sksPraktek=0/rumpunMk=null — defaults from schema. Users can edit via Mata Kuliah UI to set the breakdown.
+- DO NOT MODIFY: prisma/schema.prisma (already done by previous agent), src/lib/ai.ts (already done by previous agent)
+
+Stage Summary:
+- ✅ All 3 areas updated: API routes (8 modified + 4 new), UI components (4 tabs rewritten), Export DOCX (rewritten for OBE template)
+- ✅ TypeScript strict, no `any` (only `as never` for docx sections array which is a docx library limitation)
+- ✅ All new API routes have try/catch, proper status codes (200/201/400/404/500), JSON responses
+- ✅ Toast notifications on mutations, useQuery loading states, useAsyncAiJob for AI generate
+- ✅ Lint 0 errors, dev.log no runtime errors
+- ✅ DOCX export produces valid OBE template (header institusi, otorisasi 3-col, CPL Prodi table, CPMK, Sub-CPMK, korelasi matrix, deskripsi singkat, bahan kajian, pustaka, media, team teaching, rencana pembelajaran mingguan with 8 columns + TOTAL row, komponen penilaian)
+
+---
+Task ID: OBE-1
+Agent: full-stack-developer (subagent)
+Task: Full OBE template implementation — API routes + UI + Export DOCX
+
+Work Log:
+- Updated 13 files + created 4 new files
+- API routes: RPS GET/PUT with cplProdi+korelasi includes, create-full saves OBE fields, mata-kuliah accepts sksTeori/sksPraktek/rumpunMk, pertemuan accepts OBE fields, new CRUD routes for cpl-prodi + korelasi
+- UI: Identitas tab restructured into 4 cards (Identitas | Institusi & Pengesahan | Deskripsi & Bahan Kajian | Media & Lain-lain), CPMK tab adds CPL Prodi + Korelasi sections, Pertemuan tab adds OBE columns, Preview tab shows all OBE sections
+- Export DOCX: completely rewritten for OBE template (header institusi, otorisasi 3-col, CPL Prodi, CPMK, Sub-CPMK, korelasi matrix, deskripsi singkat, bahan kajian, pustaka, media, rencana mingguan 8 columns + TOTAL row)
+- Lint: 0 errors
+- curl tests: all API endpoints pass, DOCX export 16.7KB, PDF export 150KB
+
+Stage Summary:
+- ✅ OBE template fully implemented — all 14 missing fields now exist
+- ✅ API, UI, and Export all follow OBE structure
+- ✅ Existing RPS records gracefully show null fields as "-"
+- ✅ New AI-generated RPS will populate all OBE fields automatically
