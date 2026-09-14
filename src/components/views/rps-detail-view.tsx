@@ -54,6 +54,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { RpsFormDialog } from '@/components/rps-form-dialog'
 import { IdentitasTab } from '@/components/views/tabs/identitas-tab'
 import { CpmkTab } from '@/components/views/tabs/cpmk-tab'
@@ -63,6 +71,7 @@ import { ReferensiTab } from '@/components/views/tabs/referensi-tab'
 import { PreviewTab } from '@/components/views/tabs/preview-tab'
 import { api, exportUrl } from '@/lib/api'
 import { useAppStore } from '@/lib/store'
+import { validateRpsCompleteness, type ValidationResult } from '@/lib/rps-validation'
 
 interface Props {
   rpsId: string
@@ -76,6 +85,7 @@ export function RpsDetailView({ rpsId }: Props) {
   const [editOpen, setEditOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [exporting, setExporting] = useState<'docx' | 'pdf' | null>(null)
+  const [finalValidation, setFinalValidation] = useState<ValidationResult | null>(null)
 
   const { data: rps, isLoading, isError, error } = useQuery({
     queryKey: ['rps', rpsId],
@@ -96,6 +106,7 @@ export function RpsDetailView({ rpsId }: Props) {
   })
 
   // Quick status change mutation — updates RPS status to draft/final/revisi
+  // When setting to "final", validate RPS completeness first
   const statusMut = useMutation({
     mutationFn: (newStatus: RpsStatus) =>
       api.updateRps(rpsId, { status: newStatus }),
@@ -107,6 +118,19 @@ export function RpsDetailView({ rpsId }: Props) {
     },
     onError: (e: Error) => toast.error(e.message),
   })
+
+  // Handle status change — intercept "final" to run validation first
+  const handleStatusChange = (newStatus: RpsStatus) => {
+    if (newStatus === 'final' && rps) {
+      const validation = validateRpsCompleteness(rps)
+      if (!validation.isValid) {
+        // Show validation issues dialog — don't change status
+        setFinalValidation(validation)
+        return
+      }
+    }
+    statusMut.mutate(newStatus)
+  }
 
   const handleExport = async (format: 'docx' | 'pdf') => {
     setExporting(format)
@@ -204,7 +228,7 @@ export function RpsDetailView({ rpsId }: Props) {
                         <DropdownMenuLabel className="text-xs">Ubah Status RPS</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          onClick={() => statusMut.mutate('draft')}
+                          onClick={() => handleStatusChange('draft')}
                           disabled={statusMut.isPending || rps.status === 'draft'}
                           className="gap-2 cursor-pointer"
                         >
@@ -216,7 +240,7 @@ export function RpsDetailView({ rpsId }: Props) {
                           {rps.status === 'draft' && <CheckCircle2 className="size-4 text-emerald-500" />}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => statusMut.mutate('final')}
+                          onClick={() => handleStatusChange('final')}
                           disabled={statusMut.isPending || rps.status === 'final'}
                           className="gap-2 cursor-pointer"
                         >
@@ -228,7 +252,7 @@ export function RpsDetailView({ rpsId }: Props) {
                           {rps.status === 'final' && <CheckCircle2 className="size-4 text-emerald-500" />}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => statusMut.mutate('revisi')}
+                          onClick={() => handleStatusChange('revisi')}
                           disabled={statusMut.isPending || rps.status === 'revisi'}
                           className="gap-2 cursor-pointer"
                         >
@@ -413,6 +437,72 @@ export function RpsDetailView({ rpsId }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Validation dialog when trying to set Final on incomplete RPS */}
+      <Dialog open={!!finalValidation} onOpenChange={(o) => !o && setFinalValidation(null)}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="size-5 text-amber-500" />
+              RPS Belum Lengkap untuk Final
+            </DialogTitle>
+            <DialogDescription>
+              RPS ini belum memenuhi syarat untuk di-set ke status Final. Lengkapi komponen berikut:
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-64 pr-2">
+            <div className="space-y-2 py-2">
+              {finalValidation?.issues.map((issue, i) => (
+                <div
+                  key={i}
+                  className={`flex items-start gap-2 p-2.5 rounded-lg text-sm ${
+                    issue.severity === 'error'
+                      ? 'bg-rose-500/10 border border-rose-500/20'
+                      : 'bg-amber-500/10 border border-amber-500/20'
+                  }`}
+                >
+                  {issue.severity === 'error' ? (
+                    <AlertCircle className="size-4 text-rose-500 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="size-4 text-amber-500 shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <span className={issue.severity === 'error' ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300'}>
+                      {issue.message}
+                    </span>
+                    <Badge variant="outline" className="ml-2 text-[10px] capitalize">
+                      {issue.field}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <div className="flex items-center justify-between gap-2 pt-2 border-t">
+            <div className="text-xs text-muted-foreground">
+              {finalValidation?.issues.filter((i) => i.severity === 'error').length || 0} error
+              {' · '}
+              {finalValidation?.issues.filter((i) => i.severity === 'warning').length || 0} warning
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setFinalValidation(null)}>
+                Lengkapi dulu
+              </Button>
+              <Button
+                variant="outline"
+                className="text-amber-600 border-amber-400 hover:bg-amber-50"
+                onClick={() => {
+                  setFinalValidation(null)
+                  statusMut.mutate('final') // force set Final despite issues
+                  toast.warning('RPS di-set ke Final meski belum lengkap — silakan lengkapi segera')
+                }}
+              >
+                Tetap Set Final
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
