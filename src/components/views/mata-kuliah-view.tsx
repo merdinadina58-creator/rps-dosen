@@ -276,6 +276,9 @@ function MataKuliahFormDialog({
     kode: mataKuliah?.kode ?? '',
     nama: mataKuliah?.nama ?? '',
     sks: mataKuliah?.sks ?? 3,
+    sksTeori: mataKuliah?.sksTeori ?? 0,
+    sksPraktek: mataKuliah?.sksPraktek ?? 0,
+    rumpunMk: mataKuliah?.rumpunMk ?? '',
     semester: mataKuliah?.semester ?? 1,
     prodi: mataKuliah?.prodi ?? 'Teknik Informatika',
     deskripsi: mataKuliah?.deskripsi ?? '',
@@ -331,9 +334,18 @@ function MataKuliahFormDialog({
               />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="sks">SKS</Label>
+              <Label htmlFor="rumpun">Rumpun MK (OBE)</Label>
+              <Input
+                id="rumpun"
+                placeholder="MKN, UNP, dll"
+                value={form.rumpunMk}
+                onChange={(e) => setForm((f) => ({ ...f, rumpunMk: e.target.value }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sks">Total SKS</Label>
               <Input
                 id="sks"
                 type="number"
@@ -343,6 +355,32 @@ function MataKuliahFormDialog({
                 onChange={(e) => setForm((f) => ({ ...f, sks: Number(e.target.value) || 3 }))}
               />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="sksT">SKS Teori (T) — OBE</Label>
+              <Input
+                id="sksT"
+                type="number"
+                min={0}
+                max={8}
+                value={form.sksTeori}
+                onChange={(e) => setForm((f) => ({ ...f, sksTeori: Number(e.target.value) || 0 }))}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="sksP">SKS Praktek (P) — OBE</Label>
+              <Input
+                id="sksP"
+                type="number"
+                min={0}
+                max={8}
+                value={form.sksPraktek}
+                onChange={(e) => setForm((f) => ({ ...f, sksPraktek: Number(e.target.value) || 0 }))}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label htmlFor="smt">Semester</Label>
               <Input

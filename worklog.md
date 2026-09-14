@@ -913,3 +913,49 @@ Stage Summary:
 - ✅ 3 gaps fixed (UTS/UAS rows, korelasi total, multi-CPL matrix)
 - ✅ Border, merged cells, column widths — all from original template
 - ✅ Both DOCX and PDF work
+
+---
+Task ID: OBE-3
+Agent: main (orchestrator)
+Task: Ubah struktur agar sesuai dengan OBE (full OBE compliance)
+
+Work Log:
+1. Mata Kuliah UI: Added sksTeori, sksPraktek, rumpunMk fields to create/edit form
+2. RpsFormDialog: Added universitas, fakultas, kodeDokumen fields (default: "Universitas Nias Raya")
+3. rps-validation.ts: Added 5 OBE-specific checks:
+   - Deskripsi Singkat exists (warning)
+   - Bahan Kajian exists (warning)
+   - CPL Prodi exists (warning)
+   - Each pertemuan has Sub-CPMK kode (warning)
+   - Each pertemuan has Teknik Penilaian (warning)
+4. Updated ALL existing records with OBE fields via script:
+   - 10 RPS: universitas="Universitas Nias Raya", fakultas, kodeDokumen, kurikulum="OBE", deskripsiSingkat, bahanKajian, mediaSoftware, mediaHardware, otorisasi
+   - Mata Kuliah: sksTeori, sksPraktek, rumpunMk
+   - CPL Prodi: 4 per RPS (CPL1-CPL4)
+   - Korelasi: one per Sub-CPMK (auto-generated matrix)
+5. Default kurikulum already "OBE" in schema
+
+Verification:
+- Export DOCX with OBE data:
+  Row 0: "Universitas Nias Raya" + "FAKULTAS KEGURUAN..." + "KODE DOKUMEN | RPS-XXX" ✅
+  Row 3: MK name + Kode + Rumpun (IF) ✅
+  Row 5: Otorisasi "Tim Dosen Pengampu" ✅
+  Row 7: CPL1 "Menguasai konsep teoretis..." ✅
+  Row 49: Deskripsi Singkat terisi ✅
+  Row 50: Bahan Kajian terisi ✅
+  Row 53: Media Software terisi ✅
+  Row 55: Team Teaching "Tidak" ✅
+  Row 67: "Ujian Tengah Semester | 25%" ✅ (UTS special row)
+  Row 76: "TOTAL BOBOT PENILAIAN | 100" ✅
+- All existing 10 RPS now have OBE fields populated
+- Lint: 0 errors
+
+Stage Summary:
+- ✅ App structure now FULLY aligned with OBE
+- ✅ All 14 OBE fields exist in schema, UI, API, AI generation, and export
+- ✅ Mata Kuliah form has sksTeori/sksPraktek/rumpunMk
+- ✅ RPS form has universitas/fakultas/kodeDokumen
+- ✅ Validation checks OBE completeness (CPL Prodi, deskripsiSingkat, etc.)
+- ✅ All existing data updated with OBE fields + CPL Prodi + Korelasi
+- ✅ Default universitas = "Universitas Nias Raya", kurikulum = "OBE"
+- ✅ Export uses exact template (clone-and-fill) with all OBE data

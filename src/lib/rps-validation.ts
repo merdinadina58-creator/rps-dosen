@@ -167,6 +167,55 @@ export function validateRpsCompleteness(rps: RpsDetail): ValidationResult {
     }
   }
 
+  // ===== OBE-specific checks =====
+
+  // OBE: Deskripsi Singkat
+  if (!rps.deskripsiSingkat || rps.deskripsiSingkat.trim().length < 10) {
+    issues.push({
+      field: 'deskripsiSingkat',
+      message: 'Deskripsi Singkat (OBE) masih kosong — wajib diisi untuk format OBE',
+      severity: 'warning',
+    })
+  }
+
+  // OBE: Bahan Kajian
+  if (!rps.bahanKajian || rps.bahanKajian.trim().length < 10) {
+    issues.push({
+      field: 'bahanKajian',
+      message: 'Bahan Kajian/Materi Pembelajaran (OBE) masih kosong — wajib diisi untuk format OBE',
+      severity: 'warning',
+    })
+  }
+
+  // OBE: CPL Prodi (structured list)
+  if (!rps.cplProdi || rps.cplProdi.length === 0) {
+    issues.push({
+      field: 'cplProdi',
+      message: 'Belum ada CPL Prodi terstruktur — wajib untuk format OBE (tambahkan di tab CPMK)',
+      severity: 'warning',
+    })
+  }
+
+  // OBE: Each pertemuan should have Sub-CPMK kode + teknik penilaian
+  if (rps.pertemuan.length > 0) {
+    const noSubCpmk = rps.pertemuan.filter((p) => !p.subCpmkUtama || p.subCpmkUtama.trim() === '')
+    if (noSubCpmk.length > 0) {
+      issues.push({
+        field: 'pertemuan',
+        message: `${noSubCpmk.length} pertemuan belum punya Sub-CPMK (OBE) — minggu: ${noSubCpmk.map((p) => p.mingguKe).join(', ')}`,
+        severity: 'warning',
+      })
+    }
+    const noTeknik = rps.pertemuan.filter((p) => !p.teknikPenilaian || p.teknikPenilaian.trim() === '')
+    if (noTeknik.length > 0) {
+      issues.push({
+        field: 'pertemuan',
+        message: `${noTeknik.length} pertemuan belum punya Teknik Penilaian (OBE) — minggu: ${noTeknik.map((p) => p.mingguKe).join(', ')}`,
+        severity: 'warning',
+      })
+    }
+  }
+
   // RPS is valid if there are NO errors (warnings are OK)
   const isValid = !issues.some((i) => i.severity === 'error')
 

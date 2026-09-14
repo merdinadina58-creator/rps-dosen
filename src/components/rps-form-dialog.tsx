@@ -68,6 +68,10 @@ function RpsFormDialogInner({
   const [tahunAjaran, setTahunAjaran] = useState(rps?.tahunAjaran ?? '2024/2025')
   const [semester, setSemester] = useState(rps?.semester ?? 'Ganjil')
   const [kelas, setKelas] = useState(rps?.kelas ?? '')
+  // OBE institusi fields
+  const [universitas, setUniversitas] = useState(rps?.universitas ?? 'Universitas Nias Raya')
+  const [fakultas, setFakultas] = useState(rps?.fakultas ?? '')
+  const [kodeDokumen, setKodeDokumen] = useState(rps?.kodeDokumen ?? '')
   // For new RPS, derive judul from mata kuliah + semester + tahun (computed lazily)
   const [judulOverride, setJudulOverride] = useState<string | null>(
     rps ? rps.judul : null
@@ -93,6 +97,9 @@ function RpsFormDialogInner({
         tahunAjaran: tahunAjaran.trim(),
         semester,
         kelas: kelas.trim() || null,
+        universitas: universitas.trim() || null,
+        fakultas: fakultas.trim() || null,
+        kodeDokumen: kodeDokumen.trim() || null,
       }
       if (isEdit && rps) {
         return api.updateRps(rps.id, payload)
@@ -190,6 +197,37 @@ function RpsFormDialogInner({
               value={kelas}
               onChange={(e) => setKelas(e.target.value)}
               placeholder="Contoh: TI-3A"
+            />
+          </div>
+
+          {/* OBE Institusi fields */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <Label htmlFor="univ">Universitas (OBE)</Label>
+              <Input
+                id="univ"
+                value={universitas}
+                onChange={(e) => setUniversitas(e.target.value)}
+                placeholder="Universitas Nias Raya"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="fak">Fakultas (OBE)</Label>
+              <Input
+                id="fak"
+                value={fakultas}
+                onChange={(e) => setFakultas(e.target.value)}
+                placeholder="Keguruan dan Ilmu Pendidikan"
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="kodedok">Kode Dokumen (OBE)</Label>
+            <Input
+              id="kodedok"
+              value={kodeDokumen}
+              onChange={(e) => setKodeDokumen(e.target.value)}
+              placeholder="Contoh: RPS-MKN1104-2026"
             />
           </div>
 
