@@ -19,9 +19,7 @@ let zaiInstance: any | null = null
 
 async function getZAI() {
   if (!zaiInstance) {
-    try {
-      zaiInstance = await ZAI.create()
-    } catch {
+    if (process.env.ZAI_TOKEN) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ZAIClass = ZAI as any
       zaiInstance = new ZAIClass({
@@ -31,6 +29,8 @@ async function getZAI() {
         userId: process.env.ZAI_USER_ID,
         token: process.env.ZAI_TOKEN,
       })
+    } else {
+      zaiInstance = await ZAI.create()
     }
   }
   return zaiInstance

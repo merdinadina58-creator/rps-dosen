@@ -11,11 +11,9 @@ let zaiInstance: any | null = null
 
 async function getZAI() {
   if (!zaiInstance) {
-    try {
-      // Try config file first (works locally where /etc/.z-ai-config exists)
-      zaiInstance = await ZAI.create()
-    } catch {
-      // Fallback: construct from environment variables (Vercel production)
+    // On Vercel (production): ZAI_TOKEN env var is set, use it
+    // On local dev: .z-ai-config file exists, use ZAI.create()
+    if (process.env.ZAI_TOKEN) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ZAIClass = ZAI as any
       zaiInstance = new ZAIClass({
@@ -25,6 +23,8 @@ async function getZAI() {
         userId: process.env.ZAI_USER_ID,
         token: process.env.ZAI_TOKEN,
       })
+    } else {
+      zaiInstance = await ZAI.create()
     }
   }
   return zaiInstance
