@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { generateRpsDocxOBE, convertDocxToPdf, loadRpsForExport } from '@/lib/export'
+import { generateRpsDocxOBE, generateRpsDocx, convertDocxToPdf, loadRpsForExport } from '@/lib/export'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -26,8 +26,15 @@ export async function GET(req: NextRequest, { params }: Params) {
     const data = await loadRpsForExport(id)
     const filename = sanitizeFilename(`RPS-${data.mataKuliah.kode}-${data.mataKuliah.nama}`)
 
-    // Use OBE template-filling approach (clones the exact campus template)
-    const docxBuffer = await generateRpsDocxOBE(id)
+    // Try OBE template-filling (Python) first — gives exact template match
+    // Fall back to docx-js (Node.js) if Python not available (e.g., on Vercel serverless)
+    let docxBuffer: Buffer
+    try {
+      docxBuffer = await generateRpsDocxOBE(id)
+    } catch (obeError) {
+      console.log('[Export] OBE template approach failed, falling back to docx-js:', obeError instanceof Error ? obeError.message : obeError)
+      docxBuffer = await generateRpsDocx(id)
+    }
 
     if (format === 'docx') {
       return new NextResponse(docxBuffer, {
