@@ -288,10 +288,16 @@ SKS: ${input.sks}
 Program Studi: ${input.prodi}
 Semester: ${input.semester}
 
-Persyaratan:
-- CPMK menggunakan kata kerja aktif taksonomi Bloom (mampu menjelaskan, mampu menerapkan, mampu menganalisis, mampu merancang, dll)
+PERSYARATAN MUTLAK — KEUNIKAN PER MATA KULIAH:
+- Setiap CPMK HARUS menyebutkan nama mata kuliah atau topik SPESIFIK mata kuliah ini
+  CONTOH: bukan "Mampu menjelaskan konsep dasar" (terlalu umum)
+  TAPI: "Mampu menjelaskan konsep dasar ${input.namaMataKuliah.toLowerCase()} termasuk [topik spesifik]"
+- CPMK HARUS spesifik untuk DOMAIN mata kuliah ini — sebutkan istilah/konsep yang HANYA relevan untuk mata kuliah ini
+- JANGAN gunakan CPMK yang bisa berlaku untuk mata kuliah lain (harus unik!)
+- Gunakan kata kerja Bloom yang BERVARIASI — jangan selalu "menjelaskan → menerapkan → menganalisis → merancang"
+  Alternatif: mengevaluasi, mengembangkan, mengimplementasikan, mensimulasikan, membandingkan, mensintesis, mengkritisi, mendesain, mengoptimalkan, memvalidasi
 - Setiap CPMK harus terukur dan dapat dinilai
-- Sub-CPMK adalah penjabaran lebih spesifik dari CPMK
+- Sub-CPMK adalah penjabaran lebih spesifik dari CPMK, juga harus spesifik untuk mata kuliah ini
 - Gunakan Bahasa Indonesia formal akademik
 - Kode CPMK: CPMK1, CPMK2, dst
 - Kode Sub-CPMK: Sub-CPMK1.1, Sub-CPMK1.2, dst
@@ -301,7 +307,7 @@ WAJIB balas HANYA dalam format JSON valid (tanpa markdown code block, tanpa penj
   "cpmk": [
     {
       "kode": "CPMK1",
-      "deskripsi": "...",
+      "deskripsi": "...(harus sebut ${input.namaMataKuliah} atau topik spesifiknya)...",
       "subCpmk": [
         { "kode": "Sub-CPMK1.1", "deskripsi": "..." }
       ]
@@ -881,6 +887,11 @@ Prodi: ${input.prodi}
 Semester: ${input.semester}
 ${input.prasyarat ? `Prasyarat: ${input.prasyarat}` : ''}
 Info: ${input.deskripsiMataKuliah}
+
+PENTING — KEUNIKAN PER MATA KULIAH:
+- Semua konten (deskripsi, CPL, CPMK, materi) HARUS spesifik untuk "${input.namaMataKuliah}"
+- JANGAN gunakan deskripsi/CPL/CPMK generik yang bisa berlaku untuk mata kuliah lain
+- Sebutkan topik/konsep/teknologi yang HANYA relevan untuk mata kuliah ini
 
 Hasilkan (format OBE):
 1. DESKRIPSI lengkap (2-4 kalimat narasi akademik)

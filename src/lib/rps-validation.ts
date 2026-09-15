@@ -1,4 +1,5 @@
 import type { RpsDetail } from '@/lib/api'
+import { db } from '@/lib/db'
 
 export interface ValidationIssue {
   field: string
@@ -220,4 +221,43 @@ export function validateRpsCompleteness(rps: RpsDetail): ValidationResult {
   const isValid = !issues.some((i) => i.severity === 'error')
 
   return { isValid, issues }
+}
+
+/**
+ * Check if CPMK descriptions are unique across all RPS.
+ * Returns list of mata kuliah names that have identical CPMK.
+ */
+export async function checkCpmkUniqueness(rpsId: string): Promise<Array<{ mkName: string; cpmkText: string }>> {
+  try {
+    const currentRps = await db.rps.findUnique({
+      where: { id: rpsId },
+      select: { cpmk: { select: { deskripsi: true } } },
+    })
+    if (!currentRps || currentRps.cpmk.length === 0) return []
+
+    const currentTexts = currentRps.cpmk.map(c => c.deskripsi.toLowerCase().slice(0, 80))
+
+    const otherRps = await db.rps.findMany({
+      where: { id: { not: rpsId } },
+      select: {
+        cpmk: { select: { deskripsi: true } },
+        mataKuliah: { select: { nama: true } },
+      },
+      take: 50,
+    })
+
+    const duplicates: Array<{ mkName: string; cpmkText: string }> = []
+    for (const other of otherRps) {
+      for (const otherCpmk of other.cpmk) {
+        const otherNorm = otherCpmk.deskripsi.toLowerCase().slice(0, 80)
+        if (currentTexts.includes(otherNorm)) {
+          duplicates.push({ mkName: other.mataKuliah.nama, cpmkText: otherCpmk.deskripsi.slice(0, 50) })
+          break
+        }
+      }
+    }
+    return duplicates
+  } catch {
+    return []
+  }
 }
