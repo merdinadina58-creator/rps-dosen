@@ -6,11 +6,26 @@ import ZAI from 'z-ai-web-dev-sdk'
  * Helps lecturers generate CPMK, Sub-CPMK, weekly plans, references, etc.
  */
 
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let zaiInstance: any | null = null
 
 async function getZAI() {
   if (!zaiInstance) {
-    zaiInstance = await ZAI.create()
+    try {
+      // Try config file first (works locally where /etc/.z-ai-config exists)
+      zaiInstance = await ZAI.create()
+    } catch {
+      // Fallback: construct from environment variables (Vercel production)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ZAIClass = ZAI as any
+      zaiInstance = new ZAIClass({
+        baseUrl: process.env.ZAI_BASE_URL || 'https://internal-api.z.ai/v1',
+        apiKey: process.env.ZAI_API_KEY || 'Z.ai',
+        chatId: process.env.ZAI_CHAT_ID,
+        userId: process.env.ZAI_USER_ID,
+        token: process.env.ZAI_TOKEN,
+      })
+    }
   }
   return zaiInstance
 }
