@@ -959,7 +959,7 @@ export async function generateRpsDocxOBE(rpsId: string): Promise<Buffer> {
     // Run the Python template-filling script
     const scriptPath = path.join(process.cwd(), 'scripts', 'fill-rps-template.py')
     const { stdout, stderr } = await execAsync(
-      `python3 "${scriptPath}" "${templatePath}" "${dataJsonPath}" "${outputPath}"`,
+      `/home/z/.venv/bin/python3 "${scriptPath}" "${templatePath}" "${dataJsonPath}" "${outputPath}"`,
       { timeout: 30000 }
     )
 

@@ -993,3 +993,51 @@ Stage Summary:
 - ✅ Based on SKS, semester, prodi, and topic complexity
 - ✅ Auto-sets dropdown to recommended value (user can override)
 - ✅ Shows explanation with contributing factors
+
+---
+Task ID: OBE-EXACT
+Agent: main (orchestrator)
+Task: Analisa detail font, border, shading, page orientation + apply ke aplikasi
+
+Work Log:
+- Deep analysis of template OBE (font, border, shading, page orientation, row heights):
+  1. PAGE: Both sections LANDSCAPE (Section 0: 16838x11905=A4 landscape, Section 1: 20409x11905=wider landscape)
+  2. FONT: Header (Row 0) = inherit/28pt/bold, All other rows = Palatino Linotype/12pt (headers bold, data not bold)
+  3. SHADING: Only #FFC000 (amber/gold) on Row 1 (RPS title)
+  4. BORDERS: All table-level, single/sz4/auto (no cell overrides)
+  5. vAlign: center on Row 2 (identitas header)
+  6. Row heights: Row 0=4cm, Row 1=0.7cm, etc.
+
+- Fixed 3 issues in scripts/fill-rps-template.py:
+  1. set_cell_text(): Capture font name/size/bold from template's first run BEFORE clearing. Only set explicit font when template had explicit (not inherit). Preserve "inherit" for cells that use document default style.
+  2. Row 0 header cell: Changed from get_cell(0,0) to get_cell(0,8) — col 0-3 is empty logo area, col 8-30 is the actual university header with 28pt font
+  3. Row 76 total: Added bold=True parameter to preserve template's bold setting
+
+- Fixed export.ts: Changed python3 path from system python to venv python (/home/z/.venv/bin/python3) to resolve ModuleNotFoundError
+
+Verification (EXACT MATCH CHECK):
+- Row 0: T=inherit/28.0pt/True = O=inherit/28.0pt/True -> MATCH
+- Row 1: T=Palatino/12.0pt/True = O=Palatino/12.0pt/True -> MATCH
+- Row 2: MATCH
+- Row 6: MATCH
+- Row 11: MATCH
+- Row 19: MATCH
+- Row 49: MATCH
+- Row 57: T=Palatino/inherit/True = O=Palatino/inherit/True -> MATCH
+- Row 60: T=Palatino/12.0pt/None = O=Palatino/12.0pt/None -> MATCH
+- Row 67: MATCH
+- Row 76: T=Palatino/inherit/True = O=Palatino/inherit/True -> MATCH
+- Section 0: landscape 16838x11905 = MATCH
+- Section 1: landscape 20409x11905 = MATCH
+- Shading: FFC000 = MATCH
+- Borders: single/sz4/auto = MATCH
+- Table: 77x34 = MATCH
+- OVERALL: ALL MATCH - SAMA PERSIS!
+
+Stage Summary:
+- ✅ Font: Palatino Linotype 12pt (28pt header) - IDENTICAL
+- ✅ Border: single sz4 auto - IDENTICAL
+- ✅ Shading: #FFC000 on title row - IDENTICAL
+- ✅ Page: LANDSCAPE both sections - IDENTICAL
+- ✅ Table: 77 rows x 34 cols - IDENTICAL
+- ✅ Bold: headers bold, data not bold, total bold - IDENTICAL

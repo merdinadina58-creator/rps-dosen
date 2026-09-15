@@ -15,27 +15,56 @@ import json
 from copy import deepcopy
 from docx import Document
 from docx.oxml.ns import qn
+from docx.shared import Pt, RGBColor
 
-def set_cell_text(cell, text, bold=False):
-    """Set cell text, preserving formatting of the first paragraph."""
+def set_cell_text(cell, text, bold=None, font_name='Palatino Linotype', font_size=12):
+    """Set cell text, preserving template formatting.
+    
+    Preserves the first paragraph's first run font (Palatino Linotype 12pt etc).
+    For multi-line text, uses the first paragraph's formatting for all lines.
+    Only creates new runs with explicit font when the paragraph has NO runs.
+    
+    bold: None = preserve template's bold, True = force bold, False = force not bold
+    """
     if cell is None:
         return
-    # Clear extra paragraphs
+    
+    text = str(text) if text else ''
+    lines = text.split('\n')
+    
+    # Keep first paragraph, remove the rest
+    first_p = cell.paragraphs[0] if cell.paragraphs else cell.add_paragraph()
     for p in cell.paragraphs[1:]:
         p._element.getparent().remove(p._element)
-    p = cell.paragraphs[0]
-    # Clear extra runs
-    for run in p.runs[1:]:
+    
+    # Capture formatting from first run before clearing
+    ref_run = first_p.runs[0] if first_p.runs else None
+    # Only capture non-None values — preserve "inherit" if template uses it
+    ref_font_name = ref_run.font.name if (ref_run and ref_run.font.name) else None  # None = inherit
+    ref_font_size = ref_run.font.size if (ref_run and ref_run.font.size) else None  # None = inherit
+    ref_bold = ref_run.bold if ref_run else bold
+    
+    # Clear all runs in first paragraph
+    for run in first_p.runs:
         run._element.getparent().remove(run._element)
-    if p.runs:
-        run = p.runs[0]
-        run.text = str(text) if text else ''
-        if bold:
-            run.bold = True
-    else:
-        run = p.add_run(str(text) if text else '')
-        if bold:
-            run.bold = True
+    
+    # Add new runs with captured formatting
+    for i, line in enumerate(lines):
+        if i > 0:
+            run = first_p.add_run()
+            run.add_break()  # line break before subsequent lines
+        run = first_p.add_run(line)
+        # Only set font name if template had explicit name (not inherit)
+        if ref_font_name:
+            run.font.name = ref_font_name
+        # Only set font size if template had explicit size (not inherit)
+        if ref_font_size:
+            run.font.size = ref_font_size
+        # Bold: use explicit override if provided, otherwise use template's
+        if bold is not None:
+            run.bold = bold
+        else:
+            run.bold = ref_bold
 
 def fill_template(template_path, data_json_path, output_path):
     with open(data_json_path, 'r', encoding='utf-8') as f:
@@ -55,14 +84,15 @@ def fill_template(template_path, data_json_path, output_path):
     mk = data.get('mataKuliah', {})
 
     # ===== Row 0: Header =====
-    header_cell = get_cell(0, 0)
+    # Col 0-3 = empty cell (logo area), Col 8-30 = university header (28pt), Col 31-33 = kode dokumen
+    header_cell = get_cell(0, 8)
     if header_cell and data.get('universitas'):
         header_text = f"{data.get('universitas', '')}\nFAKULTAS {data.get('fakultas', '').upper()}\nPROGRAM STUDI {mk.get('prodi', '').upper()}"
-        set_cell_text(header_cell, header_text)
+        set_cell_text(header_cell, header_text, bold=True)
 
     kode_cell = get_cell(0, 31)
     if kode_cell:
-        set_cell_text(kode_cell, f"KODE DOKUMEN\n{data.get('kodeDokumen', '') or '.............'}")
+        set_cell_text(kode_cell, f"KODE DOKUMEN\n{data.get('kodeDokumen', '') or '.............'}", bold=True)
 
     # ===== Row 3: Identitas =====
     set_cell_text(get_cell(3, 0), mk.get('nama', ''))
@@ -188,8 +218,8 @@ def fill_template(template_path, data_json_path, output_path):
 
     # ===== Row 76: TOTAL =====
     total_bobot = sum(p.get('bobotPenilaian', 0) for p in pertemuan)
-    set_cell_text(get_cell(76, 0), 'TOTAL BOBOT PENILAIAN')
-    set_cell_text(get_cell(76, 27), str(total_bobot))
+    set_cell_text(get_cell(76, 0), 'TOTAL BOBOT PENILAIAN', bold=True)
+    set_cell_text(get_cell(76, 27), str(total_bobot), bold=True)
 
     doc.save(output_path)
     return output_path
