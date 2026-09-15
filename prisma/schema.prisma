@@ -1,5 +1,5 @@
 // RPS Dosen Management System - Prisma Schema (OBE Template)
-// Database: SQLite
+// Database: PostgreSQL (Neon) — supports both local dev (SQLite) and production (Neon)
 // Supports: Universitas Nias Raya OBE RPS template format
 
 generator client {
@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
