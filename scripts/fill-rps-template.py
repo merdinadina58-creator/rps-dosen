@@ -221,6 +221,21 @@ def fill_template(template_path, data_json_path, output_path):
     set_cell_text(get_cell(76, 0), 'TOTAL BOBOT PENILAIAN', bold=True)
     set_cell_text(get_cell(76, 27), str(total_bobot), bold=True)
 
+    # ===== Hapus Catatan (template says: "Jika sudah diisi, hapus poin catatan") =====
+    # Find the "Catatan:" paragraph and delete it + all subsequent paragraphs
+    paragraphs_to_delete = []
+    found_catatan = False
+    for i, p in enumerate(doc.paragraphs):
+        text = p.text.strip()
+        if 'Catatan' in text and len(text) < 20:
+            found_catatan = True
+        if found_catatan:
+            paragraphs_to_delete.append(p)
+    
+    if paragraphs_to_delete:
+        for p in paragraphs_to_delete:
+            p._element.getparent().remove(p._element)
+
     doc.save(output_path)
     return output_path
 

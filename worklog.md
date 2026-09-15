@@ -1041,3 +1041,24 @@ Stage Summary:
 - ✅ Page: LANDSCAPE both sections - IDENTICAL
 - ✅ Table: 77 rows x 34 cols - IDENTICAL
 - ✅ Bold: headers bold, data not bold, total bold - IDENTICAL
+
+---
+Task ID: OBE-CATATAN
+Agent: main (orchestrator)
+Task: Hapus catatan (notes 1-13) otomatis saat export — sesuai instruksi template
+
+Work Log:
+- Template OBE memiliki 13 catatan penjelasan (paragraf 20-34 di luar tabel utama)
+- Template sendiri berinstruksi: "Jika template RPS ini sudah diisi, maka silahkan hapus poin-poin catatan!"
+- Updated scripts/fill-rps-template.py: setelah isi data tabel, cari paragraph "Catatan:" lalu hapus itu + semua paragraph setelahnya
+- Verification:
+  - Before: 36 paragraphs (termasuk catatan)
+  - After: 20 paragraphs (catatan dihapus) ✅
+  - Table: 77x34 still intact ✅
+  - Row 76 Total: still present ✅
+  - Export: HTTP 200, 578KB ✅
+
+Stage Summary:
+- ✅ Catatan otomatis dihapus saat export (sesuai instruksi template)
+- ✅ Format tetap sama persis (font, border, shading, landscape)
+- ✅ Tabel utuh (77x34, merged cells)
