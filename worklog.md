@@ -1062,3 +1062,37 @@ Stage Summary:
 - ✅ Catatan otomatis dihapus saat export (sesuai instruksi template)
 - ✅ Format tetap sama persis (font, border, shading, landscape)
 - ✅ Tabel utuh (77x34, merged cells)
+
+---
+Task ID: OBE-CELLFIX
+Agent: main (orchestrator)
+Task: Fix cell index mapping — output punya kolom ekstra karena nulis ke cell yang salah
+
+Root Cause:
+Template memiliki 3 merged cells per row untuk section 49-56 (Deskripsi, Bahan Kajian, dll):
+  col0(span=6)=label, col6(span=4)=KOSONG(sub-label), col10(span=24)=konten
+Script nulis ke col6 (yang KOSONG) bukan col10 (yang KONTEN) → muncul kolom ekstra!
+
+Fix: Updated ALL cell indices in scripts/fill-rps-template.py:
+- Row 3: semester col27→col28, tgl col30→col31
+- Row 5: koordinator col20→col13
+- Rows 49-56: ALL col6→col10 (Deskripsi, Bahan Kajian, Pustaka, Media, Team Teaching, MK Syarat)
+- Row 60: kemampuan col5→col6, materi col21→col26, bobot col27→col33
+- Row 67 (UTS): label col1→col5, bobot col27→col33
+- Row 75 (UAS): label col1→col3, bobot col27→col33
+- Row 76 (Total): label col0→col2, value col27→col33
+
+Verification:
+- Rows 49-56: Exactly 2 cells with content (label + content), NO extra column ✅
+- Row 60: All 7 columns filled correctly (minggu, Sub-CPMK, kemampuan, teknik, TM, materi, bobot) ✅
+- Row 67: "Ujian Tengah Semester" at col5, "16%" at col33 ✅
+- Row 75: "Ujian Akhir Semester" at col3, "20%" at col33 ✅
+- Row 76: "TOTAL BOBOT PENILAIAN" at col2, "100" at col33 ✅
+- Row 3: Semester at col28, Tgl at col31 ✅
+- Row 5: Koordinator at col13 ✅
+
+Stage Summary:
+- ✅ No more extra columns — output matches template's 2-column layout
+- ✅ All content in correct cells
+- ✅ UTS/UAS/Total labels no longer overwritten by bobot values
+- ✅ Data correctly placed for all sections

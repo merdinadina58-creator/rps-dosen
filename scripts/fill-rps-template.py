@@ -95,12 +95,13 @@ def fill_template(template_path, data_json_path, output_path):
         set_cell_text(kode_cell, f"KODE DOKUMEN\n{data.get('kodeDokumen', '') or '.............'}", bold=True)
 
     # ===== Row 3: Identitas =====
+    # Structure: col0(6)=MK name, col6(7)=Kode, col13(7)=Rumpun, col20(3)=T, col23(1)=P, col24(4)=empty, col28(3)=Semester, col31(3)=Tgl
     set_cell_text(get_cell(3, 0), mk.get('nama', ''))
     set_cell_text(get_cell(3, 6), mk.get('kode', ''))
     set_cell_text(get_cell(3, 13), mk.get('rumpunMk', '') or '-')
     set_cell_text(get_cell(3, 20), f"T = {mk.get('sksTeori', 0)}")
     set_cell_text(get_cell(3, 23), f"P = {mk.get('sksPraktek', 0)}")
-    set_cell_text(get_cell(3, 27), str(mk.get('semester', '')))
+    set_cell_text(get_cell(3, 28), str(mk.get('semester', '')))
     tgl = data.get('tglPenyusunan', '')
     if tgl:
         try:
@@ -111,11 +112,12 @@ def fill_template(template_path, data_json_path, output_path):
             tgl_str = tgl[:10]
     else:
         tgl_str = '-'
-    set_cell_text(get_cell(3, 30), tgl_str)
+    set_cell_text(get_cell(3, 31), tgl_str)
 
     # ===== Row 5: Otorisasi =====
+    # Structure: col0(6)=label, col6(7)=Dosen Pengembang, col13(7)=Koordinator RMK, col25(9)=Kaprodi
     set_cell_text(get_cell(5, 6), data.get('otorisasiDosenPengembang', '') or '-')
-    set_cell_text(get_cell(5, 20), data.get('otorisasiKoordinatorRmk', '') or '-')
+    set_cell_text(get_cell(5, 13), data.get('otorisasiKoordinatorRmk', '') or '-')
     set_cell_text(get_cell(5, 25), data.get('otorisasiKaprodi', '') or '-')
 
     # ===== Rows 7-10: CPL Prodi =====
@@ -164,30 +166,32 @@ def fill_template(template_path, data_json_path, output_path):
     set_cell_text(get_cell(48, 32), str(total_minggu))
 
     # ===== Row 49: Deskripsi Singkat =====
-    set_cell_text(get_cell(49, 6), data.get('deskripsiSingkat', '') or data.get('deskripsi', '') or '-')
+    # Structure: col0(6)=label, col6(4)=sub-label, col10(24)=content
+    set_cell_text(get_cell(49, 10), data.get('deskripsiSingkat', '') or data.get('deskripsi', '') or '-')
 
     # ===== Row 50: Bahan Kajian =====
-    set_cell_text(get_cell(50, 6), data.get('bahanKajian', '') or '-')
+    set_cell_text(get_cell(50, 10), data.get('bahanKajian', '') or '-')
 
     # ===== Rows 51-52: Pustaka =====
     ref_utama = [r for r in data.get('referensi', []) if r.get('isUtama')]
     ref_pendukung = [r for r in data.get('referensi', []) if not r.get('isUtama')]
     utama_text = '\n'.join(f"{r.get('pengarang', '')}. {r.get('tahun', '')}. {r.get('judul', '')}. {r.get('penerbit', '')}" for r in ref_utama)
-    set_cell_text(get_cell(51, 6), utama_text or '-')
+    set_cell_text(get_cell(51, 10), 'Sumber Utama:\n' + (utama_text or '-'))
     pendukung_text = '\n'.join(f"{r.get('judul', '')}" for r in ref_pendukung)
-    set_cell_text(get_cell(52, 6), pendukung_text or '-')
+    set_cell_text(get_cell(52, 10), 'Pendukung:\n' + (pendukung_text or '-'))
 
     # ===== Rows 53-54: Media =====
-    set_cell_text(get_cell(53, 6), f"Perangkat Lunak (software): {data.get('mediaSoftware', '') or '-'}")
-    set_cell_text(get_cell(54, 6), f"Perangkat Keras (hardware): {data.get('mediaHardware', '') or '-'}")
+    set_cell_text(get_cell(53, 10), f"Perangkat Lunak (software): {data.get('mediaSoftware', '') or '-'}")
+    set_cell_text(get_cell(54, 10), f"Perangkat Keras (hardware): {data.get('mediaHardware', '') or '-'}")
 
     # ===== Row 55: Team Teaching =====
-    set_cell_text(get_cell(55, 6), 'Ya' if data.get('teamTeaching') else 'Tidak')
+    set_cell_text(get_cell(55, 10), 'Ya' if data.get('teamTeaching') else 'Tidak')
 
     # ===== Row 56: Mata Kuliah Syarat =====
-    set_cell_text(get_cell(56, 6), data.get('mataKuliahSyarat', '') or mk.get('prasyarat', '') or '-')
+    set_cell_text(get_cell(56, 10), data.get('mataKuliahSyarat', '') or mk.get('prasyarat', '') or '-')
 
     # ===== Rows 60-75: Rencana Pembelajaran =====
+    # Structure: col0(1)=minggu, col1(5)=Sub-CPMK, col6(8)=KemampuanAkhir+Indikator, col14(4)=Teknik+Kriteria, col18(3)=TM/Daring, col21(5)=empty, col26(4)=Materi, col30(3)=empty, col33(1)=Bobot
     pertemuan = data.get('pertemuan', [])
     for i in range(min(len(pertemuan), 16)):
         p = pertemuan[i]
@@ -196,30 +200,37 @@ def fill_template(template_path, data_json_path, output_path):
         is_uas = p.get('mingguKe') == 16
 
         if is_uts:
-            set_cell_text(get_cell(67, 0), '')
-            set_cell_text(get_cell(67, 1), 'Ujian Tengah Semester')
-            set_cell_text(get_cell(67, 27), f"{p.get('bobotPenilaian', 0)}%")
+            # Row 67: col5(28)=UTS label, col33(1)=bobot
+            set_cell_text(get_cell(67, 5), 'Ujian Tengah Semester')
+            set_cell_text(get_cell(67, 33), f"{p.get('bobotPenilaian', 0)}%")
             continue
         if is_uas:
-            set_cell_text(get_cell(75, 0), '')
-            set_cell_text(get_cell(75, 1), 'Ujian Akhir Semester')
-            set_cell_text(get_cell(75, 27), f"{p.get('bobotPenilaian', 0)}%")
+            # Row 75: col3(30)=UAS label, col33(1)=bobot
+            set_cell_text(get_cell(75, 3), 'Ujian Akhir Semester')
+            set_cell_text(get_cell(75, 33), f"{p.get('bobotPenilaian', 0)}%")
             continue
 
+        # Regular week — fill correct cells
         set_cell_text(get_cell(ri, 0), str(p.get('mingguKe', '')))
         set_cell_text(get_cell(ri, 1), p.get('subCpmkKode', '') or p.get('subCpmkUtama', '') or '-')
-        set_cell_text(get_cell(ri, 5), p.get('kemampuanAkhir', '') or '-')
-        set_cell_text(get_cell(ri, 10), p.get('indikator', '') or '-')
+        set_cell_text(get_cell(ri, 6), p.get('kemampuanAkhir', '') or '-')
+        # Indikator goes in the same merged cell as kemampuanAkhir (col6, span=8)
+        # We append it as a second line
+        if p.get('indikator'):
+            current = get_cell(ri, 6)
+            if current:
+                set_cell_text(current, f"{p.get('kemampuanAkhir', '') or '-'}\nIndikator: {p.get('indikator', '')}")
         teknik_kriteria = f"{p.get('teknikPenilaian', '')}\n{p.get('kriteriaPenilaian', '')}"
         set_cell_text(get_cell(ri, 14), teknik_kriteria or '-')
         set_cell_text(get_cell(ri, 18), p.get('tmDaring', '') or 'TM')
-        set_cell_text(get_cell(ri, 21), p.get('materi', '') or '-')
-        set_cell_text(get_cell(ri, 27), f"{p.get('bobotPenilaian', 0)}%")
+        set_cell_text(get_cell(ri, 26), p.get('materi', '') or '-')
+        set_cell_text(get_cell(ri, 33), f"{p.get('bobotPenilaian', 0)}%")
 
     # ===== Row 76: TOTAL =====
+    # Structure: col0(2)=empty, col2(31)=TOTAL label, col33(1)=value
     total_bobot = sum(p.get('bobotPenilaian', 0) for p in pertemuan)
-    set_cell_text(get_cell(76, 0), 'TOTAL BOBOT PENILAIAN', bold=True)
-    set_cell_text(get_cell(76, 27), str(total_bobot), bold=True)
+    set_cell_text(get_cell(76, 2), 'TOTAL BOBOT PENILAIAN', bold=True)
+    set_cell_text(get_cell(76, 33), str(total_bobot), bold=True)
 
     # ===== Hapus Catatan (template says: "Jika sudah diisi, hapus poin catatan") =====
     # Find the "Catatan:" paragraph and delete it + all subsequent paragraphs
